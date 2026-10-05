@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NOVABALL</title>
+    <meta name="description" content="NOVABALL — hover-car football at the edge of the galaxy. A procedural car-soccer arena in your browser: charge the Nova Core, fire NOVA PULSE shockwaves and fly through ZERO-G SURGES against AI rivals." />
+    <meta name="theme-color" content="#05070d" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NOVABALL — hover-car football at the edge of the galaxy" />
+    <meta property="og:description" content="Charge the Nova Core, fire NOVA PULSE shockwaves and fly through ZERO-G SURGES in a holographic stadium above a ringed gas giant. Plays in the browser, vs AI bots." />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='.45' stop-color='%238be9ff'/%3E%3Cstop offset='1' stop-color='%231ec8ff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #02040a; overflow: hidden; }
+      #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      /* Static first paint (before any JS): the game's UI loader covers it as soon as it exists, then it is removed.
+         Same background, horizon and layout as the loader (src/ui/styles/menus.css) so the swap is barely visible. */
+      #nb-splash {
+        --u: max(0.6px, min(100vw / 1600, 100vh / 900));
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(60% 55% at 22% 28%, rgba(118, 40, 210, 0.34), transparent 70%),
+          radial-gradient(55% 50% at 80% 30%, rgba(20, 140, 220, 0.26), transparent 70%),
+          radial-gradient(70% 60% at 60% 90%, rgba(190, 40, 160, 0.18), transparent 70%),
+          linear-gradient(180deg, #03050d 0%, #060a1a 60%, #04060e 100%);
+        color: #e6f3ff;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      #nb-splash .nb-sp-horizon {
+        position: absolute;
+        left: -20%;
+        right: -20%;
+        bottom: -118vh;
+        height: 150vh;
+        border-radius: 50%;
+        background: radial-gradient(closest-side, #050815 96%, transparent 100%);
+        box-shadow:
+          0 calc(-2 * var(--u)) calc(6 * var(--u)) rgba(139, 233, 255, 0.8),
+          0 calc(-10 * var(--u)) calc(40 * var(--u)) rgba(30, 200, 255, 0.45),
+          0 calc(-40 * var(--u)) calc(140 * var(--u)) rgba(80, 90, 255, 0.35);
+      }
+      #nb-splash .nb-sp-center {
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: calc(22 * var(--u));
+        width: 92vw;
+      }
+      #nb-splash .nb-sp-word {
+        font-size: calc(96 * var(--u));
+        font-weight: 900;
+        font-style: italic;
+        letter-spacing: 0.1em;
+        line-height: 1;
+        background: linear-gradient(180deg, #ffffff 0%, #bff4ff 45%, #1ec8ff 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 18px rgba(30, 200, 255, 0.55));
+      }
+      #nb-splash .nb-sp-tag {
+        font-size: max(10px, calc(17 * var(--u)));
+        font-weight: 600;
+        letter-spacing: 0.46em;
+        text-transform: uppercase;
+        opacity: 0.7;
+        text-align: center;
+      }
+      #nb-splash .nb-sp-bar {
+        position: relative;
+        margin-top: calc(48 * var(--u));
+        width: min(80vw, calc(560 * var(--u)));
+        height: max(3px, calc(4 * var(--u)));
+        border-radius: 2px;
+        background: rgba(139, 233, 255, 0.15);
+        overflow: hidden;
+      }
+      #nb-splash .nb-sp-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 34%;
+        border-radius: 2px;
+        background: linear-gradient(90deg, transparent, #8be9ff, transparent);
+        animation: nbSpBar 1.3s ease-in-out infinite;
+      }
+      @keyframes nbSpBar {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(310%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #nb-splash .nb-sp-bar::after { animation-duration: 4s; }
+      }
+      .nb-boot-msg {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 32px;
+        text-align: center;
+        background: radial-gradient(ellipse at 50% 35%, #16204a 0%, #05070d 65%);
+        color: #e6f3ff;
+        font: 18px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      .nb-boot-msg b { font-size: clamp(24px, 4.5vw, 44px); font-weight: 900; letter-spacing: 0.1em; color: #8be9ff; text-shadow: 0 0 24px #1ec8ff; }
+      .nb-boot-msg span { max-width: 640px; opacity: 0.85; }
+    </style>
+    <script>
+      // Boot watchdog (classic script, runs before the game bundle). If the bundle fails to load or to evaluate —
+      // a wrong deploy path, a 404, or a browser too old for the code — say so instead of leaving a dark page.
+      // src/main.ts sets window.__nbBooted as soon as the bundle runs (and removes a message shown too early).
+      (function () {
+        var shown = false;
+        function show() {
+          if (shown || window.__nbBooted) return;
+          if (!document.body) return void document.addEventListener('DOMContentLoaded', show);
+          shown = true;
+          var el = document.createElement('div');
+          el.id = 'nb-boot-error';
+          el.className = 'nb-boot-msg';
+          el.setAttribute('role', 'alert');
+          el.innerHTML =
+            '<b>NOVABALL</b><span>NOVABALL could not start — use the latest Chrome, Edge, Firefox or Safari 16.4+ ' +
+            '(with hardware acceleration enabled), then reload the page.</span>';
+          document.body.appendChild(el);
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (window.__nbBooted) return;
+            var t = e && e.target;
+            // a <script> that failed to load, or an error thrown while the bundle evaluated
+            if ((t && t.tagName === 'SCRIPT') || (e && e.message)) show();
+          },
+          true
+        );
+        function check() {
+          if (window.__nbBooted) return;
+          // still downloading on a slow connection: keep waiting until the page has finished loading
+          if (document.readyState !== 'complete') return void setTimeout(check, 3000);
+          show();
+        }
+        setTimeout(check, 15000);
+      })();
+    </script>
+  </head>
+  <body>
+    <canvas id="game" tabindex="0"></canvas>
+    <div id="nb-splash" aria-hidden="true">
+      <div class="nb-sp-horizon"></div>
+      <div class="nb-sp-center">
+        <div class="nb-sp-word">NOVABALL</div>
+        <div class="nb-sp-tag">Hover-car football at the edge of the galaxy</div>
+        <div class="nb-sp-bar"></div>
+      </div>
+    </div>
+    <div id="ui"></div>
+    <noscript>
+      <div class="nb-boot-msg"><b>NOVABALL</b><span>NOVABALL is a real-time 3D game: please enable JavaScript to play.</span></div>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

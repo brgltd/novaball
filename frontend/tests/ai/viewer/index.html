@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NOVABALL AI viewer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05070d;
+        overflow: hidden;
+        font: 12px/1.35 monospace;
+        color: #cfe3ff;
+      }
+      #hud {
+        position: fixed;
+        left: 10px;
+        top: 8px;
+        white-space: pre;
+        pointer-events: none;
+        text-shadow: 0 0 4px #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

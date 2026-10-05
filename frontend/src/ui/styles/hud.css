@@ -1,0 +1,1639 @@
+/* NOVABALL UI — in-match HUD, kickoff countdown, notifications, scoreboard overlay.
+   Rules: no backdrop-filter here (it would re-blur the WebGL canvas every frame); animate transform/opacity only. */
+
+.nb-hud-layer {
+  z-index: 5;
+}
+.nb-hud-layer.is-hidden-hud .nb-hud {
+  opacity: 0;
+}
+.nb-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.nb-app[data-screen='pause'] .nb-hud {
+  opacity: 0.35;
+}
+.nb-hud[data-phase='ended'] .nb-hud-br,
+.nb-hud[data-phase='ended'] .nb-pulse {
+  opacity: 0;
+}
+
+/* =================================================================== SCOREBOARD */
+
+.nb-hud-top {
+  position: absolute;
+  left: 50%;
+  top: calc(16 * var(--u));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+.nb-sb {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: calc(58 * var(--u));
+  filter: drop-shadow(0 calc(6 * var(--u)) calc(14 * var(--u)) rgba(0, 0, 0, 0.55));
+}
+.nb-sb-side {
+  display: flex;
+  align-items: stretch;
+}
+.nb-sb-plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--u));
+  width: calc(178 * var(--u));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tcd) 88%, transparent), color-mix(in srgb, var(--tc) 38%, var(--tcd)));
+  border-bottom: calc(3 * var(--u)) solid var(--tc);
+}
+.nb-sb-side.t0 .nb-sb-plate {
+  clip-path: polygon(calc(20 * var(--u)) 0, 100% 0, 100% 100%, 0 100%);
+  padding-left: calc(12 * var(--u));
+}
+.nb-sb-side.t1 .nb-sb-plate {
+  clip-path: polygon(0 0, calc(100% - 20 * var(--u)) 0, 100% 100%, 0 100%);
+  padding-right: calc(12 * var(--u));
+  background: linear-gradient(270deg, color-mix(in srgb, var(--tcd) 88%, transparent), color-mix(in srgb, var(--tc) 38%, var(--tcd)));
+}
+.nb-sb-name {
+  font: 900 calc(19 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.22em;
+  margin-right: -0.22em;
+  color: var(--tc2);
+  text-shadow: 0 0 calc(10 * var(--u)) color-mix(in srgb, var(--tc) 70%, transparent);
+}
+.nb-sb-you {
+  display: none;
+  padding: calc(3 * var(--u)) calc(5 * var(--u));
+  font: 700 max(11px, calc(10 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.12em;
+  color: #1a1000;
+  background: var(--gold);
+  border-radius: calc(2 * var(--u));
+}
+.nb-sb-you.is-on {
+  display: inline-block;
+}
+.nb-sb-score {
+  display: grid;
+  place-items: center;
+  width: calc(76 * var(--u));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 92%, #fff), var(--tc) 55%, color-mix(in srgb, var(--tc) 70%, #000));
+  box-shadow: inset 0 calc(-3 * var(--u)) 0 rgba(0, 0, 0, 0.25);
+}
+.nb-sb-score-n {
+  /* Rajdhani digits: an unmistakable 0 (Orbitron's zero is slashed and its O reads as a box) */
+  font: 700 calc(52 * var(--u)) / 1 var(--font-b);
+  margin-top: calc(2 * var(--u));
+  color: #fff;
+  text-shadow:
+    0 calc(2 * var(--u)) 0 rgba(0, 0, 0, 0.3),
+    0 0 calc(14 * var(--u)) rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.nb-sb-clock {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--u));
+  width: calc(156 * var(--u));
+  background: linear-gradient(180deg, rgba(10, 16, 32, 0.96), rgba(4, 7, 16, 0.96));
+  border-bottom: calc(3 * var(--u)) solid rgba(210, 225, 255, 0.55);
+}
+.nb-sb-time {
+  font: 700 calc(33 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.04em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.nb-sb-ot {
+  display: none;
+  padding: calc(4 * var(--u)) calc(6 * var(--u));
+  font: 900 max(11px, calc(12 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.1em;
+  color: #1a0d00;
+  background: var(--gold);
+  border-radius: calc(2 * var(--u));
+}
+.nb-sb-clock.is-ot {
+  border-bottom-color: var(--gold);
+}
+.nb-sb-clock.is-ot .nb-sb-ot {
+  display: inline-block;
+}
+.nb-sb-clock.is-ot .nb-sb-time {
+  font-size: calc(28 * var(--u));
+  color: #ffe9b3;
+}
+.nb-sb-clock.is-low .nb-sb-time {
+  color: #ffe08a;
+}
+.nb-sb-clock.is-low {
+  border-bottom-color: var(--gold);
+}
+.nb-sb-clock.is-final {
+  border-bottom-color: var(--danger);
+}
+.nb-sb-clock.is-final .nb-sb-time {
+  color: #ff8a9b;
+  text-shadow: 0 0 calc(14 * var(--u)) rgba(255, 61, 90, 0.8);
+}
+.nb-sb-free {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(5 * var(--u));
+  padding: 0 calc(44 * var(--u));
+  background: linear-gradient(180deg, rgba(10, 16, 32, 0.94), rgba(4, 7, 16, 0.94));
+  border-bottom: calc(3 * var(--u)) solid var(--volt);
+  clip-path: polygon(calc(16 * var(--u)) 0, calc(100% - 16 * var(--u)) 0, 100% 100%, 0 100%);
+}
+.nb-sb-free-k {
+  font: 900 calc(22 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.24em;
+  color: #fff;
+}
+.nb-sb-free-v {
+  font: 700 max(11px, calc(11 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.26em;
+  color: var(--volt-2);
+}
+.is-freeplay .nb-sb-side,
+.is-freeplay .nb-sb-clock {
+  display: none;
+}
+.is-freeplay .nb-sb-free {
+  display: flex;
+}
+
+/* =================================================================== CORE CHARGE */
+
+.nb-charge {
+  --cc: #e6f3ff;
+  --cc2: #ffffff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  height: calc(42 * var(--u));
+  padding: 0 calc(20 * var(--u)) 0 calc(15 * var(--u));
+  background: linear-gradient(180deg, rgba(8, 13, 26, 0.9), rgba(4, 7, 16, 0.9));
+  border: 1px solid color-mix(in srgb, var(--cc) 30%, transparent);
+  border-radius: calc(21 * var(--u));
+  transition: border-color 0.25s;
+}
+.nb-charge.is-off {
+  display: none;
+}
+.nb-charge-ico {
+  display: grid;
+  place-items: center;
+  width: calc(25 * var(--u));
+  height: calc(25 * var(--u));
+  color: var(--cc);
+}
+.nb-charge-ico .nb-ico {
+  width: 100%;
+  height: 100%;
+}
+.nb-charge-label {
+  font: 700 max(12px, calc(14 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.18em;
+  color: color-mix(in srgb, var(--cc2) 88%, transparent);
+  white-space: nowrap;
+}
+.nb-charge-pips {
+  position: relative;
+  display: flex;
+  gap: calc(5 * var(--u));
+}
+.nb-charge-pip {
+  width: calc(25 * var(--u));
+  height: calc(12.5 * var(--u));
+  transform: skewX(-18deg);
+  background: rgba(160, 185, 230, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(160, 185, 230, 0.2);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.nb-charge-pip.is-on {
+  background: linear-gradient(180deg, var(--cc2), var(--cc));
+  box-shadow: 0 0 calc(10 * var(--u)) var(--cc);
+}
+.nb-charge-num {
+  min-width: calc(34 * var(--u));
+  font: 900 calc(22 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.06em;
+  color: var(--cc2);
+  text-shadow: 0 0 calc(10 * var(--u)) var(--cc);
+}
+.nb-charge.lv0 .nb-charge-num {
+  display: none;
+}
+.nb-charge.lv0 {
+  opacity: 0.88;
+}
+/* 10 s decay window under the pips (HudState.chargeDecay01, when provided) */
+.nb-charge-decay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(-6 * var(--u));
+  height: calc(2.5 * var(--u));
+  border-radius: calc(2 * var(--u));
+  background: rgba(160, 185, 230, 0.16);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.nb-charge-decay.is-on {
+  opacity: 1;
+}
+.nb-charge-decay-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--cc), var(--cc2));
+}
+.nb-charge-glow {
+  position: absolute;
+  inset: calc(-12 * var(--u)) calc(-26 * var(--u));
+  z-index: -1;
+  border-radius: calc(36 * var(--u));
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--cc) 55%, transparent), transparent);
+  opacity: 0;
+}
+.nb-charge.lv2 .nb-charge-glow {
+  opacity: 0.35;
+}
+.nb-charge.lv3 {
+  border-color: var(--cc);
+  box-shadow:
+    0 0 calc(16 * var(--u)) color-mix(in srgb, var(--cc) 60%, transparent),
+    inset 0 0 calc(12 * var(--u)) color-mix(in srgb, var(--cc) 35%, transparent);
+}
+.nb-charge.lv3 .nb-charge-glow {
+  animation: nbNova 0.9s ease-in-out infinite;
+}
+.nb-charge.lv3 .nb-charge-label {
+  color: #fff;
+  letter-spacing: 0.22em;
+  text-shadow: 0 0 calc(10 * var(--u)) var(--cc);
+}
+.nb-charge.lv3 .nb-charge-pip.is-on {
+  background: linear-gradient(180deg, #fff, var(--cc2));
+  animation: nbPipFlicker 0.45s steps(2) infinite;
+}
+@keyframes nbNova {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+@keyframes nbPipFlicker {
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* =================================================================== ZERO-G SURGE */
+
+.nb-surge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.nb-surge-warn,
+.nb-surge-active {
+  display: none;
+}
+.nb-surge[data-state='warning'] .nb-surge-warn {
+  display: flex;
+}
+.nb-surge[data-state='active'] .nb-surge-active {
+  display: flex;
+}
+.nb-surge-warn {
+  align-items: center;
+  gap: calc(12 * var(--u));
+  height: calc(38 * var(--u));
+  padding: 0 calc(20 * var(--u));
+  margin-top: calc(4 * var(--u));
+  font: 900 max(12px, calc(16 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.22em;
+  color: #fff;
+  background: linear-gradient(90deg, rgba(120, 30, 200, 0.2), rgba(150, 50, 230, 0.75) 50%, rgba(120, 30, 200, 0.2));
+  border-top: 1px solid rgba(226, 184, 255, 0.7);
+  border-bottom: 1px solid rgba(226, 184, 255, 0.7);
+  text-shadow: 0 0 calc(12 * var(--u)) var(--nova);
+  animation: nbSurgeBlink 0.5s ease-in-out infinite alternate;
+}
+.nb-surge-warn-n {
+  display: inline-block;
+  min-width: 1ch;
+  color: var(--nova-2);
+}
+.nb-surge-chev {
+  font-size: max(11px, calc(12 * var(--u)));
+  color: var(--nova-2);
+}
+@keyframes nbSurgeBlink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+.nb-surge-active {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(6 * var(--u));
+  width: calc(300 * var(--u));
+  margin-top: calc(4 * var(--u));
+}
+.nb-surge-row {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  font: 900 max(12px, calc(13 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.24em;
+  color: #fff;
+  text-shadow: 0 0 calc(10 * var(--u)) var(--nova);
+}
+.nb-surge-ico {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+  color: var(--nova-2);
+}
+.nb-surge-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--nova-2);
+}
+.nb-surge-bar {
+  position: relative;
+  height: calc(6 * var(--u));
+  border-radius: calc(3 * var(--u));
+  background: rgba(60, 20, 100, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(180, 77, 255, 0.35);
+  overflow: hidden;
+}
+.nb-surge-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #7a2cff, var(--nova) 60%, #f0d6ff);
+  box-shadow: 0 0 calc(10 * var(--u)) var(--nova);
+}
+
+/* =================================================================== NOVA PULSE (bottom left) */
+
+.nb-pulse {
+  position: absolute;
+  left: calc(38 * var(--u));
+  bottom: calc(34 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(16 * var(--u));
+  transition: opacity 0.3s;
+}
+.nb-pulse.is-off {
+  display: none;
+}
+.nb-pulse-badge {
+  position: relative;
+  width: calc(104 * var(--u));
+  height: calc(104 * var(--u));
+}
+.nb-pulse-ringsvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.nb-pulse-ringsvg .g-track {
+  fill: none;
+  stroke: rgba(150, 175, 230, 0.16);
+  stroke-width: 9;
+}
+.nb-pulse-ringsvg .g-fill {
+  fill: none;
+  stroke: #6f8bff;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+.nb-pulse.is-ready .nb-pulse-ringsvg .g-fill {
+  stroke: var(--volt-2);
+  filter: drop-shadow(0 0 4px var(--volt));
+}
+.nb-pulse-core {
+  position: absolute;
+  inset: 14%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, rgba(40, 60, 120, 0.9), rgba(6, 10, 22, 0.95) 70%);
+  box-shadow: inset 0 0 0 1px rgba(111, 139, 255, 0.35);
+  transition: box-shadow 0.3s;
+}
+.nb-pulse-ico {
+  grid-area: 1 / 1;
+  width: calc(44 * var(--u));
+  height: calc(44 * var(--u));
+  color: rgba(150, 170, 230, 0.35);
+  transition:
+    color 0.3s,
+    transform 0.3s var(--ease-snap);
+}
+.nb-pulse-cd {
+  grid-area: 1 / 1;
+  display: inline-block;
+  font: 900 calc(30 * var(--u)) / 1 var(--font-d);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 calc(10 * var(--u)) rgba(111, 139, 255, 0.9);
+}
+.nb-pulse.is-ready .nb-pulse-core {
+  background: radial-gradient(circle at 50% 40%, rgba(40, 150, 255, 0.55), rgba(10, 30, 70, 0.95) 72%);
+  box-shadow:
+    inset 0 0 0 1px var(--volt-2),
+    0 0 calc(24 * var(--u)) rgba(30, 200, 255, 0.6);
+}
+.nb-pulse.is-ready .nb-pulse-ico {
+  color: #fff;
+  filter: drop-shadow(0 0 calc(6 * var(--u)) var(--volt));
+}
+.nb-pulse-deny {
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: calc(3 * var(--u)) solid #ff5a70;
+  background: radial-gradient(closest-side, transparent 72%, rgba(255, 61, 90, 0.35));
+  opacity: 0;
+  pointer-events: none;
+}
+.nb-pulse-wave {
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  border: calc(2 * var(--u)) solid var(--volt-2);
+  opacity: 0;
+}
+.nb-pulse.is-ready .nb-pulse-wave {
+  animation: nbPulseWave 2.2s ease-out infinite;
+}
+.nb-pulse.is-ready .nb-pulse-wave.w2 {
+  animation-delay: 1.1s;
+}
+@keyframes nbPulseWave {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+.nb-pulse-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(6 * var(--u));
+}
+.nb-pulse-name {
+  font: 900 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.2em;
+  color: #fff;
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+}
+.nb-pulse-state {
+  font: 700 max(12px, calc(15 * var(--u))) / 1 var(--font-b);
+  letter-spacing: 0.3em;
+  color: var(--ink-3);
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+}
+.nb-pulse.is-ready .nb-pulse-state {
+  color: var(--volt-2);
+}
+.nb-pulse-key {
+  margin-top: calc(2 * var(--u));
+}
+.nb-pulse-key .nb-kbd,
+.nb-pulse-key .nb-gp {
+  margin: 0;
+}
+
+/* =================================================================== BOOST GAUGE (bottom right) */
+
+.nb-hud-br {
+  position: absolute;
+  right: calc(34 * var(--u));
+  bottom: calc(22 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  transition: opacity 0.3s;
+}
+.nb-boost {
+  position: relative;
+  width: calc(214 * var(--u));
+  height: calc(214 * var(--u));
+}
+.nb-boost-glow {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(30, 200, 255, 0.35), rgba(30, 200, 255, 0.08) 60%, transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.nb-boost.is-full .nb-boost-glow {
+  opacity: 1;
+  animation: nbBoostFull 1.4s ease-in-out infinite;
+}
+@keyframes nbBoostFull {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+.nb-boost-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.nb-boost-svg circle {
+  fill: none;
+}
+.nb-boost-svg .g-ticks {
+  stroke: rgba(190, 215, 255, 0.35);
+  stroke-width: 5;
+}
+.nb-boost-svg .g-track {
+  stroke: rgba(6, 10, 22, 0.78);
+  stroke-width: 20;
+}
+.nb-boost-svg .g-fill {
+  stroke: var(--volt);
+  stroke-width: 14;
+  filter: drop-shadow(0 0 5px rgba(30, 200, 255, 0.9));
+  transition: stroke 0.25s;
+}
+.nb-boost.is-full .g-fill {
+  stroke: #9ff0ff;
+}
+.nb-boost.is-low .g-fill {
+  stroke: #ffb347;
+  filter: drop-shadow(0 0 5px rgba(255, 150, 60, 0.8));
+}
+.nb-boost-svg .g-ss {
+  stroke: #fff;
+  stroke-width: 3;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.nb-boost.is-super .g-ss {
+  opacity: 1;
+  stroke: #fff2d6;
+  filter: drop-shadow(0 0 4px #ff9a3d) drop-shadow(0 0 10px #ff6a1a);
+}
+.nb-boost-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: calc(6 * var(--u));
+}
+.nb-boost-num {
+  font: 900 calc(58 * var(--u)) / 1 var(--font-d);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 0 calc(16 * var(--u)) rgba(30, 200, 255, 0.75),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+}
+.nb-boost.is-low .nb-boost-num {
+  color: #ffd6a6;
+  text-shadow:
+    0 0 calc(14 * var(--u)) rgba(255, 150, 60, 0.7),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+}
+.nb-boost-label {
+  margin-top: calc(4 * var(--u));
+  font: 700 max(11px, calc(12 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.34em;
+  margin-right: -0.34em;
+  color: var(--volt-2);
+}
+.nb-boost-speed {
+  margin-top: calc(12 * var(--u));
+  font: 700 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.nb-boost-unit {
+  font-size: max(11px, calc(10 * var(--u)));
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+/* the boost key sits in the open bottom of the gauge, like the F under NOVA PULSE */
+.nb-boost-key {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16 * var(--u));
+  transform: translateX(-50%);
+  transition: opacity 0.2s;
+}
+.nb-boost-key .nb-kbd,
+.nb-boost-key .nb-gp {
+  margin: 0;
+}
+.nb-boost.is-super .nb-boost-key {
+  opacity: 0;
+}
+.nb-boost-ss {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14 * var(--u));
+  transform: translateX(-50%) skewX(-10deg);
+  padding: calc(4 * var(--u)) calc(10 * var(--u));
+  font: 900 max(11px, calc(11 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.24em;
+  color: #200a00;
+  background: linear-gradient(90deg, #ffd08a, #ff8a3d);
+  border-radius: calc(2 * var(--u));
+  box-shadow: 0 0 calc(16 * var(--u)) rgba(255, 120, 40, 0.8);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.nb-boost.is-super .nb-boost-ss {
+  opacity: 1;
+}
+
+.nb-ballcam {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  height: max(26px, calc(34 * var(--u)));
+  padding: 0 calc(6 * var(--u)) 0 calc(12 * var(--u));
+  font: 700 max(11px, calc(12 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  background: rgba(5, 9, 20, 0.72);
+  border: 1px solid var(--line);
+  border-radius: calc(17 * var(--u));
+  transition:
+    color 0.2s,
+    border-color 0.2s;
+}
+.nb-ballcam-ico {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+}
+.nb-ballcam-s {
+  min-width: calc(30 * var(--u));
+  color: var(--ink-4);
+}
+.nb-ballcam.is-on {
+  color: #fff;
+  border-color: rgba(139, 233, 255, 0.5);
+}
+.nb-ballcam.is-on .nb-ballcam-ico,
+.nb-ballcam.is-on .nb-ballcam-s {
+  color: var(--volt-2);
+}
+.nb-hud .nb-ballcam-key .nb-kbd,
+.nb-hud .nb-ballcam-key .nb-gp {
+  height: max(19px, calc(24 * var(--u)));
+  min-width: max(19px, calc(24 * var(--u)));
+  font-size: max(11px, calc(10 * var(--u)));
+  margin: 0;
+}
+.nb-hud .nb-ballcam-key .nb-gp-face {
+  width: max(19px, calc(24 * var(--u)));
+}
+
+/* HUD keycaps / pad glyphs: legibility floor on small windows */
+.nb-hud .nb-kbd,
+.nb-cd .nb-kbd {
+  min-width: max(21px, calc(30 * var(--u)));
+  height: max(21px, calc(30 * var(--u)));
+  font-size: max(11px, calc(14 * var(--u)));
+}
+.nb-hud .nb-kbd.is-wide,
+.nb-cd .nb-kbd.is-wide {
+  font-size: max(11px, calc(11.5 * var(--u)));
+}
+.nb-hud .nb-gp,
+.nb-cd .nb-gp {
+  height: max(21px, calc(30 * var(--u)));
+  font-size: max(11px, calc(14 * var(--u)));
+}
+.nb-hud .nb-gp-face,
+.nb-cd .nb-gp-face {
+  width: max(21px, calc(30 * var(--u)));
+}
+.nb-hud .nb-gp-bumper,
+.nb-hud .nb-gp-trigger,
+.nb-hud .nb-gp-menu,
+.nb-cd .nb-gp-bumper,
+.nb-cd .nb-gp-trigger {
+  font-size: max(11px, calc(12 * var(--u)));
+}
+.nb-hud .nb-gp-stick-l,
+.nb-cd .nb-gp-stick-l {
+  font-size: max(11px, calc(12 * var(--u)));
+}
+
+/* =================================================================== OFF-SCREEN BALL INDICATOR */
+
+.nb-ballind {
+  --bc: #e6f3ff;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+  will-change: transform;
+}
+.nb-ballind.is-on {
+  opacity: 1;
+}
+.nb-ballind-ball {
+  position: absolute;
+  left: calc(-13 * var(--u));
+  top: calc(-13 * var(--u));
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #fff 0 12%, color-mix(in srgb, var(--bc) 70%, #fff) 30%, var(--bc) 65%, color-mix(in srgb, var(--bc) 50%, #000) 100%);
+  box-shadow:
+    0 0 0 calc(2 * var(--u)) rgba(4, 8, 18, 0.8),
+    0 0 calc(14 * var(--u)) var(--bc);
+}
+.nb-ballind-arrow {
+  position: absolute;
+  left: calc(18 * var(--u));
+  top: calc(-10 * var(--u));
+  width: 0;
+  height: 0;
+  border-top: calc(10 * var(--u)) solid transparent;
+  border-bottom: calc(10 * var(--u)) solid transparent;
+  border-left: calc(15 * var(--u)) solid var(--bc);
+  filter: drop-shadow(0 0 calc(6 * var(--u)) var(--bc));
+}
+.nb-ballind.is-nova .nb-ballind-ball {
+  animation: nbNova 0.6s ease-in-out infinite;
+}
+
+/* =================================================================== RESPAWN */
+
+.nb-respawn {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  transform: translate(-50%, -50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+.nb-hud.is-dead .nb-respawn {
+  display: flex;
+  animation: nbFadeUp 0.4s var(--ease-out) both;
+}
+.nb-respawn-k {
+  font: 900 calc(24 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.3em;
+  margin-right: -0.3em;
+  color: #ff8a9b;
+  text-shadow:
+    0 0 calc(16 * var(--u)) rgba(255, 61, 90, 0.85),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.8);
+}
+.nb-respawn-ring {
+  position: relative;
+  width: calc(96 * var(--u));
+  height: calc(96 * var(--u));
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(40, 6, 14, 0.8), rgba(10, 4, 8, 0.6) 70%);
+}
+.nb-respawn-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.nb-respawn-svg circle {
+  fill: none;
+  stroke-width: 8;
+}
+.nb-respawn-svg .g-track {
+  stroke: rgba(255, 61, 90, 0.15);
+}
+.nb-respawn-svg .g-fill {
+  stroke: #ff5a70;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px #ff3d5a);
+}
+.nb-respawn-n {
+  position: relative;
+  font: 900 calc(40 * var(--u)) / 1 var(--font-d);
+  color: #fff;
+}
+.nb-respawn-sub {
+  font: 700 max(12px, calc(13 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.34em;
+  margin-right: -0.34em;
+  color: var(--ink-2);
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.9);
+}
+
+/* =================================================================== FPS */
+
+.nb-fps {
+  position: absolute;
+  left: calc(14 * var(--u));
+  top: calc(12 * var(--u));
+  display: none;
+  align-items: baseline;
+  gap: calc(5 * var(--u));
+  padding: calc(5 * var(--u)) calc(9 * var(--u));
+  background: rgba(3, 6, 14, 0.7);
+  border: 1px solid var(--line);
+  border-radius: calc(4 * var(--u));
+}
+.nb-fps.is-on {
+  display: flex;
+}
+.nb-fps-n {
+  min-width: 2.2ch;
+  text-align: right;
+  font: 700 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  font-variant-numeric: tabular-nums;
+  color: var(--good);
+}
+.nb-fps[data-q='ok'] .nb-fps-n {
+  color: var(--gold);
+}
+.nb-fps[data-q='bad'] .nb-fps-n {
+  color: var(--danger);
+}
+.nb-fps-u {
+  font: 700 max(11px, calc(10 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+/* =================================================================== REPLAY */
+
+.nb-replay {
+  display: none;
+}
+.nb-hud.is-replay .nb-replay {
+  display: block;
+}
+.nb-hud.is-replay .nb-pulse,
+.nb-hud.is-replay .nb-hud-br,
+.nb-hud.is-replay .nb-respawn,
+.nb-hud.is-replay .nb-hud-tips {
+  display: none;
+}
+.nb-replay-tag {
+  position: absolute;
+  left: calc(44 * var(--u));
+  top: calc(96 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  height: calc(52 * var(--u));
+  padding: 0 calc(26 * var(--u)) 0 calc(18 * var(--u));
+  overflow: hidden;
+  background: linear-gradient(90deg, rgba(4, 7, 16, 0.92), rgba(4, 7, 16, 0.6));
+  border-left: calc(4 * var(--u)) solid #ff3d5a;
+  transform: skewX(-12deg);
+}
+.nb-replay-dot {
+  width: calc(12 * var(--u));
+  height: calc(12 * var(--u));
+  border-radius: 50%;
+  background: #ff3d5a;
+  box-shadow: 0 0 calc(12 * var(--u)) #ff3d5a;
+  animation: nbBlink 1s ease-in-out infinite;
+  transform: skewX(12deg);
+}
+.nb-replay-t {
+  font: 900 calc(28 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.3em;
+  color: #fff;
+  transform: skewX(12deg);
+}
+.nb-replay-stripes {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.12;
+  background: repeating-linear-gradient(90deg, #fff 0 2px, transparent 2px 14px);
+  animation: nbStripes 1.2s linear infinite;
+}
+@keyframes nbStripes {
+  to {
+    transform: translateX(calc(14 * var(--u)));
+  }
+}
+.nb-replay-skip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(64 * var(--u));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(16 * var(--u));
+  background: rgba(3, 6, 14, 0.6);
+  border-radius: calc(20 * var(--u));
+  animation: nbBlink 2.4s ease-in-out infinite;
+}
+.nb-replay-skip-l {
+  font: 700 max(12px, calc(14 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.24em;
+  color: var(--ink);
+}
+
+/* =================================================================== TIPS COLUMN (free-play hints + FIRST FLIGHT coach) */
+/* Bottom-left, stacked above the NOVA PULSE badge: never over the car (bottom centre), the scoreboard or the gauge. */
+
+.nb-hud-tips {
+  position: absolute;
+  left: calc(38 * var(--u));
+  bottom: calc(158 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(12 * var(--u));
+  transition: opacity 0.3s;
+}
+.nb-pulse.is-off ~ .nb-hud-tips {
+  bottom: calc(34 * var(--u));
+}
+.nb-app[data-screen='pause'] .nb-hud-tips,
+.nb-hud[data-phase='ended'] .nb-hud-tips {
+  opacity: 0;
+}
+.nb-free-hints {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(8 * var(--u));
+  padding: calc(10 * var(--u)) calc(16 * var(--u)) calc(10 * var(--u)) calc(12 * var(--u));
+  background: rgba(3, 6, 14, 0.58);
+  border: 1px solid var(--line);
+  border-left: calc(3 * var(--u)) solid var(--volt);
+  border-radius: calc(4 * var(--u));
+}
+.is-freeplay .nb-free-hints {
+  display: flex;
+}
+.nb-free-h {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  font: 700 max(12px, calc(13 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.2em;
+  color: var(--ink-2);
+}
+.nb-free-h .nb-kbd,
+.nb-free-h .nb-gp {
+  margin: 0;
+}
+
+.nb-coach {
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(6 * var(--u));
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.nb-coach.is-on {
+  display: flex;
+  opacity: 1;
+}
+@starting-style {
+  .nb-coach.is-on {
+    opacity: 0;
+  }
+}
+.nb-coach-head {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  width: 100%;
+  margin-bottom: calc(2 * var(--u));
+  font: 700 max(11px, calc(12 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.3em;
+  color: var(--volt-2);
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.9);
+}
+.nb-coach-line {
+  flex: 1;
+  min-width: calc(30 * var(--u));
+  height: 1px;
+  background: linear-gradient(90deg, rgba(139, 233, 255, 0.5), transparent);
+}
+.nb-coach-chip {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  height: max(26px, calc(34 * var(--u)));
+  padding: 0 calc(10 * var(--u)) 0 calc(6 * var(--u));
+  background: linear-gradient(90deg, rgba(4, 8, 18, 0.78), rgba(4, 8, 18, 0.5));
+  border: 1px solid var(--line-2);
+  border-radius: calc(4 * var(--u));
+  transition:
+    border-color 0.25s,
+    opacity 0.35s;
+}
+.nb-coach-keys {
+  display: inline-flex;
+  align-items: center;
+}
+.nb-coach-keys > span {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+}
+.nb-coach-keys .nb-kbd,
+.nb-coach-keys .nb-gp {
+  margin: 0;
+}
+.nb-coach-label {
+  font: 700 max(12px, calc(14 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.14em;
+  color: #fff;
+  white-space: nowrap;
+}
+.nb-coach-tick {
+  display: grid;
+  place-items: center;
+  width: max(16px, calc(20 * var(--u)));
+  height: max(16px, calc(20 * var(--u)));
+  margin-left: auto;
+  border-radius: 50%;
+  color: #031422;
+  background: var(--good);
+  box-shadow: 0 0 calc(10 * var(--u)) rgba(77, 255, 166, 0.6);
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.2s,
+    transform 0.3s var(--ease-snap);
+}
+.nb-coach-tick .nb-ico {
+  width: 70%;
+  height: 70%;
+}
+.nb-coach-chip.is-ticked {
+  border-color: rgba(77, 255, 166, 0.55);
+}
+.nb-coach-chip.is-ticked .nb-coach-label {
+  color: var(--ink-2);
+}
+.nb-coach-chip.is-ticked .nb-coach-tick {
+  opacity: 1;
+  transform: none;
+}
+.nb-coach-chip.is-na {
+  display: none;
+}
+
+/* =================================================================== KICKOFF COUNTDOWN */
+
+.nb-cd {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 0;
+  height: 0;
+  display: none;
+  pointer-events: none;
+}
+.nb-cd.is-on {
+  display: block;
+}
+.nb-cd-num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(600 * var(--u));
+  margin-left: calc(-300 * var(--u));
+  margin-top: calc(-110 * var(--u));
+  text-align: center;
+  font: 900 calc(220 * var(--u)) / 1 var(--font-d);
+  color: #fff;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  text-shadow:
+    0 0 calc(24 * var(--u)) rgba(30, 200, 255, 0.95),
+    0 0 calc(80 * var(--u)) rgba(60, 120, 255, 0.7),
+    0 calc(6 * var(--u)) calc(16 * var(--u)) rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+.nb-cd.is-go .nb-cd-num {
+  width: calc(900 * var(--u));
+  margin-left: calc(-450 * var(--u));
+  font-size: calc(200 * var(--u));
+  letter-spacing: 0.04em;
+  color: #eaffff;
+  text-shadow:
+    0 0 calc(20 * var(--u)) #fff,
+    0 0 calc(50 * var(--u)) rgba(30, 200, 255, 1),
+    0 0 calc(120 * var(--u)) rgba(80, 90, 255, 0.85);
+}
+.nb-cd-ring {
+  position: absolute;
+  left: calc(-160 * var(--u));
+  top: calc(-160 * var(--u));
+  width: calc(320 * var(--u));
+  height: calc(320 * var(--u));
+  border-radius: 50%;
+  border: calc(3 * var(--u)) solid rgba(139, 233, 255, 0.85);
+  box-shadow:
+    0 0 calc(24 * var(--u)) rgba(30, 200, 255, 0.7),
+    inset 0 0 calc(24 * var(--u)) rgba(30, 200, 255, 0.5);
+  opacity: 0;
+}
+.nb-cd-ring.r2 {
+  border-width: calc(1.5 * var(--u));
+  border-color: rgba(200, 180, 255, 0.8);
+}
+.nb-cd-sub {
+  /* above the numeral: at kickoff the camera frames the car right under it */
+  position: absolute;
+  left: calc(-400 * var(--u));
+  width: calc(800 * var(--u));
+  top: calc(-136 * var(--u));
+  display: flex;
+  justify-content: center;
+  text-align: center;
+  font: 700 max(12px, calc(16 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.5em;
+  color: var(--ink-2);
+  text-shadow: 0 1px calc(8 * var(--u)) rgba(0, 0, 0, 0.9);
+}
+.nb-cd-sub-t {
+  margin-right: -0.5em;
+}
+.nb-cd-coach {
+  display: none;
+  align-items: center;
+  gap: calc(22 * var(--u));
+  padding: calc(8 * var(--u)) calc(18 * var(--u));
+  letter-spacing: 0.18em;
+  color: #fff;
+  background: radial-gradient(closest-side, rgba(3, 6, 14, 0.6), rgba(3, 6, 14, 0.25) 70%, transparent);
+}
+.nb-cd-coach-i {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  white-space: nowrap;
+}
+.nb-cd-coach-i .nb-kbd,
+.nb-cd-coach-i .nb-gp {
+  margin: 0;
+}
+.nb-cd-coach-sep {
+  color: var(--ink-3);
+}
+.nb-cd.is-coach .nb-cd-sub-t {
+  display: none;
+}
+.nb-cd.is-coach .nb-cd-coach {
+  display: inline-flex;
+}
+.nb-cd.is-go .nb-cd-sub {
+  display: none;
+}
+
+/* =================================================================== NOTIFICATIONS */
+/* Banner animations are transform / opacity only and every glow is a pre-rendered gradient: a GOAL slam must never
+   trigger layout or re-rasterize big blurs mid-animation (it used to cost 20+ layouts and 50-80 ms frames). */
+
+.nb-notify {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.nb-banner-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 29%;
+  height: 0;
+}
+/* live-play (compact) banners: one slim line right under the scoreboard + CORE CHARGE pill */
+.nb-banner-cslot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(129 * var(--u));
+  height: 0;
+}
+.nb-banner {
+  --tc: #1ec8ff;
+  --tc2: #8be9ff;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  display: flex;
+  justify-content: center;
+}
+/* screen tint centred on the banner: exactly one viewport (the slot sits at 29% of the viewport-sized HUD layer) */
+.nb-banner-flash {
+  position: absolute;
+  left: 0;
+  top: -29vh;
+  width: 100%;
+  height: 100vh;
+  background: radial-gradient(110vw 110vh at 50% 29vh, color-mix(in srgb, var(--tc) 55%, transparent), color-mix(in srgb, var(--tc) 12%, transparent) 45%, transparent 70%);
+  opacity: 0;
+}
+.nb-banner-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(-64 * var(--u));
+  height: calc(128 * var(--u));
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--tc) 22%, rgba(3, 6, 14, 0.7)) 22%, color-mix(in srgb, var(--tc) 30%, rgba(3, 6, 14, 0.75)) 50%, color-mix(in srgb, var(--tc) 22%, rgba(3, 6, 14, 0.7)) 78%, transparent 100%);
+}
+.nb-banner-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: calc(2 * var(--u));
+  background: linear-gradient(90deg, transparent, var(--tc2) 30%, #fff 50%, var(--tc2) 70%, transparent);
+  box-shadow: 0 0 calc(10 * var(--u)) var(--tc);
+}
+.nb-banner-line.l1 {
+  top: calc(-64 * var(--u));
+}
+.nb-banner-line.l2 {
+  top: calc(62 * var(--u));
+}
+/* shock ring: a pre-blurred radial gradient (no box-shadow blur to re-raster), scaled on the compositor */
+.nb-banner-ring {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 90vmin;
+  height: 90vmin;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, transparent 84%, color-mix(in srgb, var(--tc) 30%, transparent) 90%, color-mix(in srgb, var(--tc2) 90%, #fff) 94.5%, color-mix(in srgb, var(--tc) 38%, transparent) 97.5%, transparent 100%);
+  opacity: 0;
+}
+.nb-banner-rays {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.nb-ray-group {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+/* core streak + soft elliptical glow (two static gradients, no box-shadow) */
+.nb-ray {
+  position: absolute;
+  left: 0;
+  top: calc(-7 * var(--u));
+  width: calc(180 * var(--u));
+  height: calc(14 * var(--u));
+  transform-origin: 0 50%;
+  background:
+    linear-gradient(90deg, transparent, var(--tc2) 40%, #fff) 0 50% / 100% calc(4 * var(--u)) no-repeat,
+    radial-gradient(closest-side at 70% 50%, color-mix(in srgb, var(--tc) 55%, transparent), transparent);
+}
+.nb-banner-content {
+  position: absolute;
+  top: calc(-60 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.nb-banner-titlewrap {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--u));
+  height: calc(92 * var(--u));
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+.nb-banner-ico {
+  display: grid;
+  place-items: center;
+  width: calc(46 * var(--u));
+  height: calc(46 * var(--u));
+  color: var(--tc2);
+  filter: drop-shadow(0 0 calc(8 * var(--u)) var(--tc));
+}
+.nb-banner-ico .nb-ico {
+  width: 100%;
+  height: 100%;
+}
+.nb-banner-title {
+  font: 900 calc(64 * var(--u)) / 1 var(--font-d);
+  font-style: italic;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow:
+    0 0 calc(18 * var(--u)) var(--tc),
+    0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(0, 0, 0, 0.65);
+}
+.nb-banner-sub {
+  margin-top: calc(4 * var(--u));
+  font: 700 calc(20 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.24em;
+  color: var(--tc2);
+  text-shadow: 0 1px calc(8 * var(--u)) rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+.nb-banner-pts {
+  position: relative;
+  margin-top: calc(16 * var(--u));
+  padding: calc(7 * var(--u)) calc(16 * var(--u));
+  font: 900 calc(18 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.2em;
+  color: #fff;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tc) 70%, #000), var(--tc), color-mix(in srgb, var(--tc) 70%, #000));
+  border: 1px solid color-mix(in srgb, var(--tc2) 80%, transparent);
+  border-radius: calc(3 * var(--u));
+  transform: skewX(-10deg);
+  box-shadow: 0 0 calc(20 * var(--u)) color-mix(in srgb, var(--tc) 70%, transparent);
+  white-space: nowrap;
+}
+
+/* goal banner is the loudest */
+.nb-banner.k-goal .nb-banner-band,
+.nb-banner.k-ownGoal .nb-banner-band {
+  top: calc(-96 * var(--u));
+  height: calc(192 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-line.l1,
+.nb-banner.k-ownGoal .nb-banner-line.l1 {
+  top: calc(-96 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-line.l2,
+.nb-banner.k-ownGoal .nb-banner-line.l2 {
+  top: calc(94 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-content,
+.nb-banner.k-ownGoal .nb-banner-content {
+  top: calc(-92 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-titlewrap,
+.nb-banner.k-ownGoal .nb-banner-titlewrap {
+  height: calc(128 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-title,
+.nb-banner.k-ownGoal .nb-banner-title {
+  font-size: calc(118 * var(--u));
+}
+.nb-banner.k-goal .nb-banner-ico,
+.nb-banner.k-ownGoal .nb-banner-ico {
+  display: none;
+}
+.nb-banner.is-supernova .nb-banner-pts {
+  background: linear-gradient(90deg, var(--tc), #fff 50%, var(--tc));
+  color: #0a0a14;
+  box-shadow: 0 0 calc(16 * var(--u)) var(--tc);
+}
+/* SUPERNOVA badge heartbeat: a pre-rendered glow whose opacity pulses (no animated box-shadow → no per-frame paint) */
+.nb-banner.is-supernova .nb-banner-pts::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    0 0 calc(40 * var(--u)) #fff,
+    0 0 calc(70 * var(--u)) var(--tc);
+  opacity: 0;
+  animation: nbNovaPts 0.5s ease-in-out infinite alternate;
+}
+@keyframes nbNovaPts {
+  to {
+    opacity: 1;
+  }
+}
+.nb-banner.k-surge .nb-banner-title {
+  letter-spacing: 0.14em;
+}
+
+/* ---- compact live-play banner: icon · TITLE · subtitle on one line, no band / flash / rays */
+.nb-cb-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  height: calc(32 * var(--u));
+  padding: 0 calc(22 * var(--u));
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+.nb-cb-glow {
+  position: absolute;
+  inset: calc(-8 * var(--u)) calc(-60 * var(--u));
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(3, 6, 14, 0.7), rgba(3, 6, 14, 0.42) 62%, transparent);
+}
+.nb-cb-ico {
+  display: grid;
+  place-items: center;
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  color: var(--tc2);
+  filter: drop-shadow(0 0 calc(6 * var(--u)) var(--tc));
+}
+.nb-cb-ico .nb-ico {
+  width: 100%;
+  height: 100%;
+}
+.nb-cb-title {
+  font: italic 900 calc(32 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow:
+    0 0 calc(12 * var(--u)) var(--tc),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.75);
+}
+.nb-cb-sub {
+  font: 700 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.2em;
+  color: var(--tc2);
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.9);
+}
+.nb-cb-pts {
+  font: 900 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  text-shadow: 0 1px calc(6 * var(--u)) rgba(0, 0, 0, 0.9);
+}
+.nb-cb-line {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: calc(-3 * var(--u));
+  height: calc(2 * var(--u));
+  background: linear-gradient(90deg, transparent, var(--tc2) 30%, #fff 50%, var(--tc2) 70%, transparent);
+}
+/* the surge widget sits where compact banners appear: hide it while one is up (and during replays) */
+.nb-surge {
+  transition: opacity 0.15s;
+}
+.nb-hud-layer.has-cbanner .nb-surge,
+.nb-hud.is-replay .nb-surge {
+  opacity: 0;
+}
+
+/* feed */
+.nb-feed {
+  position: absolute;
+  right: calc(30 * var(--u));
+  top: calc(150 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(8 * var(--u));
+}
+.nb-feed-item {
+  --tc: #9fb8ff;
+  --tc2: #e6f0ff;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  height: max(30px, calc(46 * var(--u)));
+  padding: 0 calc(16 * var(--u)) 0 calc(24 * var(--u));
+  background: linear-gradient(270deg, color-mix(in srgb, var(--tc) 30%, rgba(4, 8, 18, 0.88)), rgba(4, 8, 18, 0.72));
+  border-right: calc(3 * var(--u)) solid var(--tc);
+  clip-path: polygon(calc(16 * var(--u)) 0, 100% 0, 100% 100%, 0 100%);
+}
+.nb-feed-ico {
+  display: grid;
+  place-items: center;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  color: var(--tc2);
+}
+.nb-feed-ico .nb-ico {
+  width: 100%;
+  height: 100%;
+}
+.nb-feed-text {
+  display: flex;
+  align-items: baseline;
+  gap: calc(10 * var(--u));
+  white-space: nowrap;
+}
+.nb-feed-title {
+  font: 900 max(12px, calc(15 * var(--u))) / 1 var(--font-d);
+  letter-spacing: 0.14em;
+  color: #fff;
+}
+.nb-feed-sub {
+  font: 700 max(12px, calc(16 * var(--u))) / 1 var(--font-b);
+  letter-spacing: 0.08em;
+  color: var(--tc2);
+}
+.nb-feed-pts {
+  margin-left: calc(4 * var(--u));
+  font: 900 max(12px, calc(14 * var(--u))) / 1 var(--font-d);
+  color: var(--gold);
+}
+
+/* =================================================================== SCOREBOARD OVERLAY (hold ` / Back) */
+
+.nb-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(70% 70% at 50% 50%, rgba(2, 4, 10, 0.55), rgba(2, 4, 10, 0.25));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.15s,
+    visibility 0s linear 0.15s;
+}
+.nb-overlay.is-on {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.15s,
+    visibility 0s;
+}
+.nb-overlay-card {
+  width: calc(900 * var(--u));
+  padding: calc(22 * var(--u)) calc(26 * var(--u)) calc(20 * var(--u));
+  background: linear-gradient(160deg, rgba(10, 18, 38, 0.95), rgba(4, 8, 18, 0.94));
+  border: 1px solid var(--line-2);
+  border-radius: calc(8 * var(--u));
+  box-shadow: 0 calc(30 * var(--u)) calc(80 * var(--u)) rgba(0, 0, 0, 0.6);
+  transform: scale(0.98);
+  transition: transform 0.2s var(--ease-out);
+}
+.nb-overlay.is-on .nb-overlay-card {
+  transform: none;
+}
+.nb-overlay-head {
+  margin-bottom: calc(12 * var(--u));
+  font: 700 calc(14 * var(--u)) / 1 var(--font-d);
+  letter-spacing: 0.3em;
+  color: var(--ink-2);
+}
+
+/* replay mode hides the kickoff countdown & overlay noise */
+.nb-app.is-replay .nb-feed {
+  opacity: 0.6;
+}

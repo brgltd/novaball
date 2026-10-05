@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Generated screenshots (frontend/scripts/shot.mjs, frontend/scripts/playtest.mjs)
+frontend/dev/shots/
+
+# Test / coverage output
+coverage/
+test-results/
+playwright-report/
+
+# Vite / tool caches
+.vite/
+.cache/
+vite.config.*.timestamp-*
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db

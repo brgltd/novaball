@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NOVABALL — UI sandbox</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #game {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        outline: none;
+      }
+      #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      #dev {
+        position: fixed;
+        left: 8px;
+        bottom: 8px;
+        z-index: 100;
+        width: 250px;
+        max-height: 70vh;
+        overflow: auto;
+        padding: 8px;
+        font: 12px/1.3 ui-monospace, monospace;
+        color: #cfe3ff;
+        background: rgba(0, 0, 0, 0.78);
+        border: 1px solid #334;
+        border-radius: 6px;
+      }
+      #dev.hidden {
+        display: none;
+      }
+      #dev b {
+        color: #8be9ff;
+      }
+      #dev button {
+        margin: 2px;
+        padding: 2px 6px;
+        font: 11px ui-monospace, monospace;
+        color: #fff;
+        background: #1a2440;
+        border: 1px solid #3a4a70;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      #dev pre {
+        margin: 6px 0 0;
+        white-space: pre-wrap;
+        color: #9fb;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" tabindex="0"></canvas>
+    <div id="ui"></div>
+    <div id="dev"></div>
+    <script type="module" src="./ui-sandbox.ts"></script>
+  </body>
+</html>

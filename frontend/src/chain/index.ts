@@ -7,3 +7,6 @@ export * from './NovaChain';
 export * from './config';
 export * from './format';
 export { exportGuestKey, walletOptions } from './wallet';
+
+// dev builds: inspect / drive the on-chain layer from the console (window.__nova.state, __nova.refresh(), ...)
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __nova: NovaChain }).__nova = chain;

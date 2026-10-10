@@ -102,6 +102,22 @@ export const ICONS = {
   verified: S(`<path d="M12 2.6 19.6 5.6v5.8c0 4.6-3.2 8.4-7.6 9.9-4.4-1.5-7.6-5.3-7.6-9.9V5.6z" fill="currentColor" fill-opacity=".18"/><path d="m8.2 12.2 2.6 2.6 5-5.2"/>`),
   /** Light bulb (tips). */
   tip: S(`<path d="M9 17.5h6M10 20.5h4"/><path d="M12 3.5a5.8 5.8 0 0 0-3.4 10.5c.6.5.9 1.1.9 1.8v.7h5v-.7c0-.7.3-1.3.9-1.8A5.8 5.8 0 0 0 12 3.5z" fill="currentColor" fill-opacity=".2"/>`),
+  /** NOVA token: hex coin with a four-point star. */
+  nova: S(`<path d="M12 2.5 20.2 7.25v9.5L12 21.5 3.8 16.75v-9.5z" fill="currentColor" fill-opacity=".18"/><path d="M12 6.6c.5 3 1.9 4.4 4.9 4.9-3 .5-4.4 1.9-4.9 4.9-.5-3-1.9-4.4-4.9-4.9 3-.5 4.4-1.9 4.9-4.9z" fill="currentColor" stroke-width="1.2"/>`),
+  /** Wallet. */
+  wallet: S(`<path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h11.5v3"/><rect x="3.5" y="8" width="17" height="11.5" rx="2.2" fill="currentColor" fill-opacity=".16"/><path d="M20.5 11.5h-4a2 2 0 0 0 0 4h4"/><circle cx="16.7" cy="13.5" r=".9" fill="currentColor" stroke="none"/>`),
+  /** Padlock (locked cosmetic). */
+  lock: S(`<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".2"/><path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7"/><path d="M12 14.3v2.6"/>`),
+  /** Arrow out of a box (open in the block explorer). */
+  external: S(`<path d="M13.5 4.5h6v6M19.5 4.5 11 13"/><path d="M17.5 14v4.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1H10"/>`),
+  /** Two sheets (copy). */
+  copy: S(`<rect x="8.5" y="8.5" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".16"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>`),
+  /** Key (export the guest wallet). */
+  key: S(`<circle cx="8" cy="15.5" r="4" fill="currentColor" fill-opacity=".16"/><path d="m10.9 12.6 8.6-8.6M16.5 7l2.5 2.5M14.2 9.3l2 2"/>`),
+  /** Chain links (on-chain). */
+  chain: S(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1.2-1.2"/>`),
+  /** Arc spinner (rotate with CSS). */
+  spinner: S(`<circle cx="12" cy="12" r="8.5" stroke-opacity=".2"/><path d="${arc(12, 12, 8.5, -90, 30)}"/>`, ' stroke-width="2.4"'),
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -1,5 +1,7 @@
 /** Title screen over the live 3D attract match: wordmark, main menu, pilot card, NOVA rules card, input hints. */
+import { chain, NETWORK_LABEL, shortAddress } from '../../chain';
 import { CAR_STYLES, GAME_TAGLINE, PAINTS } from '../../theme';
+import { novaAmount } from '../chainui';
 import { Panel, type UIContext } from '../core';
 import { div, frag, h, span } from '../dom';
 import { carSvg, ICONS, type IconName } from '../icons';
@@ -24,13 +26,17 @@ export class MainMenu extends Panel {
   private readonly pilotStyle: HTMLElement;
   private readonly pilotCar: HTMLElement;
   private readonly fsLabel: HTMLElement;
+  private readonly walletBalance = novaAmount('nb-wcard-balance');
+  private readonly walletSub: HTMLElement;
+  private readonly walletCard: HTMLElement | null;
 
   constructor(private readonly ctx: UIContext, actions: { play(): void; freePlay(): void }) {
     super();
     const entries: MenuEntry[] = [
       { id: 'play', label: 'PLAY', desc: 'Exhibition vs AI · 1v1 · 2v2 · 3v3', icon: 'play', primary: true, action: actions.play },
       { id: 'free', label: 'FREE PLAY', desc: 'Just you, the Nova Core and an empty arena', icon: 'freePlay', action: actions.freePlay },
-      { id: 'garage', label: 'GARAGE', desc: 'Callsign, body style and paint', icon: 'garage', action: () => ctx.open('garage') },
+      { id: 'garage', label: 'GARAGE', desc: chain.state.enabled ? 'Cars & paints · unlock NFTs with NOVA' : 'Callsign, body style and paint', icon: 'garage', action: () => ctx.open('garage') },
+      ...(chain.state.enabled ? [{ id: 'wallet', label: 'WALLET', desc: 'NOVA balance, NFTs & on-chain activity', icon: 'wallet' as IconName, action: () => ctx.open('wallet') }] : []),
       { id: 'settings', label: 'SETTINGS', desc: 'Graphics · camera · audio · controls', icon: 'settings', action: () => ctx.open('settings') },
       { id: 'controls', label: 'CONTROLS', desc: 'Keyboard, mouse and gamepad layout', icon: 'gamepad', action: () => ctx.open('controls') },
     ];
@@ -71,6 +77,23 @@ export class MainMenu extends Panel {
       ctx.sound('click');
       ctx.open('garage');
     });
+
+    // Wallet card (under the pilot card) → wallet panel. Only when the game is connected to a deployment.
+    this.walletSub = span('nb-wcard-sub');
+    this.walletCard = chain.state.enabled
+      ? h(
+          'button',
+          { class: 'nb-wcard', type: 'button', 'data-nav': '', 'data-nav-group': 'side', 'aria-label': 'Open wallet' },
+          h('span', { class: 'nb-wcard-ico' }, icon('nova')),
+          h('span', { class: 'nb-wcard-text' }, h('span', { class: 'nb-wcard-k' }, 'NOVA', span('nb-wcard-net', h('span', { class: 'nb-net-dot' }), NETWORK_LABEL)), this.walletBalance.el, this.walletSub),
+          h('span', { class: 'nb-pilot-edit' }, icon('chevron')),
+        )
+      : null;
+    this.walletCard?.addEventListener('click', () => {
+      ctx.sound('click');
+      ctx.open('wallet');
+    });
+    chain.subscribe(() => this.refreshWallet());
 
     // The three original mechanics, always visible for first-time players (and judges).
     const rule = (ico: IconName, name: string, text: string, cls: string) =>
@@ -124,7 +147,7 @@ export class MainMenu extends Panel {
       div('nb-main-scan'),
       h('header', { class: 'nb-main-head' }, logo('xl'), h('div', { class: 'nb-main-tag' }, span('nb-main-tag-line'), GAME_TAGLINE.toUpperCase())),
       list,
-      h('div', { class: 'nb-main-side' }, pilot, rules),
+      h('div', { class: 'nb-main-side' }, h('div', { class: 'nb-main-side-top' }, pilot, this.walletCard), rules),
       footer,
     );
   }
@@ -141,5 +164,20 @@ export class MainMenu extends Panel {
     this.pilotStyle.textContent = `${style.name} · ${paint ? paint.name.toUpperCase() : 'CUSTOM'}`;
     this.pilotCar.innerHTML = carSvg(style.id, { ground: false });
     this.pilotCar.style.setProperty('--paint', s.paint);
+    this.refreshWallet();
+  }
+
+  private refreshWallet(): void {
+    if (!this.walletCard) return;
+    const st = chain.state;
+    this.walletBalance.set(st.balance);
+    const n = chain.affordable().length;
+    this.walletSub.textContent = !st.wallet
+      ? 'CONNECTING…'
+      : n > 0
+        ? `${n} UNLOCK${n === 1 ? '' : 'S'} AVAILABLE IN THE GARAGE`
+        : `${st.wallet.kind === 'guest' ? 'GUEST WALLET' : st.wallet.label.toUpperCase()} · ${shortAddress(st.wallet.address)}`;
+    this.walletCard.classList.toggle('has-unlocks', n > 0);
+    this.walletCard.classList.toggle('is-offline', st.status === 'error');
   }
 }

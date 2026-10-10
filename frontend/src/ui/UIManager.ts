@@ -16,6 +16,7 @@ import './styles/base.css';
 import './styles/menus.css';
 import './styles/panels.css';
 import './styles/hud.css';
+import './styles/chain.css';
 
 import type { HudNotification, HudState, IUIManager, MatchSummary, NotificationKind, UICallbacks, UIScreen, UiSound } from '../contracts';
 import { GP, inputHub, type InputDevice } from '../input/InputHub';
@@ -39,7 +40,10 @@ import { MatchSetup, randomSeed } from './screens/MatchSetup';
 import { PauseMenu } from './screens/PauseMenu';
 import { SettingsPanel } from './screens/SettingsPanel';
 import { Tutorial } from './screens/Tutorial';
+import { WalletPanel } from './screens/WalletPanel';
 import { adjustHandlers } from './widgets';
+import { chain } from '../chain';
+import { ownedSetup } from './chainui';
 
 const MENU_SCREENS: ReadonlySet<UIScreen> = new Set<UIScreen>(['main', 'pause', 'end']);
 const STICK_THRESHOLD = 0.55;
@@ -96,6 +100,7 @@ export class UIManager implements IUIManager {
   private readonly settingsPanel: SettingsPanel;
   private readonly controls: ControlsPanel;
   private readonly tutorial: Tutorial;
+  private readonly wallet: WalletPanel;
   private readonly confirmDialog: ConfirmDialog;
 
   private screenName: UIScreen = 'none';
@@ -113,6 +118,7 @@ export class UIManager implements IUIManager {
   private settingsRaf = 0;
   private saveTimer = 0;
   private readonly unsubDevice: () => void;
+  private readonly unsubChain: () => void;
   private disposed = false;
 
   // --- end-screen input lock (UI-1)
@@ -217,9 +223,10 @@ export class UIManager implements IUIManager {
     this.settingsPanel = new SettingsPanel(ctx);
     this.controls = new ControlsPanel(ctx);
     this.tutorial = new Tutorial(ctx);
+    this.wallet = new WalletPanel(ctx);
     this.confirmDialog = new ConfirmDialog(ctx);
 
-    this.panelLayer = div('nb-panels', this.setup.el, this.garage.el, this.settingsPanel.el, this.controls.el, this.tutorial.el, this.confirmDialog.el);
+    this.panelLayer = div('nb-panels', this.setup.el, this.garage.el, this.settingsPanel.el, this.controls.el, this.tutorial.el, this.wallet.el, this.confirmDialog.el);
 
     this.app = h(
       'div',
@@ -260,6 +267,9 @@ export class UIManager implements IUIManager {
     // Boot straight into the loading screen, opaque from its very first frame (never a black page).
     this.loading.el.classList.add('is-boot');
     this.showScreen('loading');
+    // On-chain layer: wallet + NOVA balance + NFT ownership (the garage only equips what the player owns).
+    this.unsubChain = chain.subscribe(() => this.enforceOwnership());
+    void chain.start();
   }
 
   // =========================================================================== IUIManager
@@ -356,6 +366,8 @@ export class UIManager implements IUIManager {
 
   showEndScreen(summary: MatchSummary): void {
     this.lastConfig = summary.config;
+    // Mint the player's NOVA for this match (the end screen shows the reward as it lands on-chain).
+    chain.reportMatch(summary);
     this.endScreen.set(summary);
     this.showScreen('end');
     // Space / Enter / A also skip the final replay: ignore them until the end screen has landed (UI-1).
@@ -377,6 +389,7 @@ export class UIManager implements IUIManager {
     this.stopLoop();
     inputHub.uiActive = false;
     this.unsubDevice();
+    this.unsubChain();
     window.removeEventListener('keydown', this.onKeyDown, true);
     window.removeEventListener('pointerdown', this.onPointerDown, true);
     this.app.removeEventListener('pointerover', this.onPointerOver);
@@ -565,6 +578,8 @@ export class UIManager implements IUIManager {
         return this.controls;
       case 'tutorial':
         return this.tutorial;
+      case 'wallet':
+        return this.wallet;
     }
   }
 
@@ -625,6 +640,7 @@ export class UIManager implements IUIManager {
 
   private launch(cfg: MatchConfig): void {
     if (this.launching) return;
+    if (cfg.player) cfg = { ...cfg, player: { ...cfg.player, ...ownedSetup(cfg.player.style, cfg.player.paint) } };
     const go = () => {
       if (this.launching) return;
       this.launching = true;
@@ -664,6 +680,17 @@ export class UIManager implements IUIManager {
   }
 
   // =========================================================================== settings
+
+  /** A cosmetic the wallet does not own (another wallet, a reset chain) falls back to the starter kit. */
+  private enforceOwnership(): void {
+    if (!chain.ownershipKnown) return;
+    const s = this.settings;
+    const own = ownedSetup(s.carStyle, s.paint);
+    if (own.style === s.carStyle && own.paint === s.paint) return;
+    s.carStyle = own.style;
+    s.paint = own.paint;
+    this.settingsChanged();
+  }
 
   private settingsChanged(): void {
     this.applyUiSettings();

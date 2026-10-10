@@ -6,6 +6,8 @@ import { Panel, type UIContext } from '../core';
 import { div, formatClock, h, play, scoreText, span } from '../dom';
 import { ScoreTable } from '../hud/ScoreTable';
 import { button, gp, hint, icon, kbd } from '../widgets';
+import { chain, formatNova, NETWORK_LABEL, txUrl, type RewardState } from '../../chain';
+import { openUrl } from '../chainui';
 
 const DIFF_NAME: Record<string, string> = { rookie: 'ROOKIE', pro: 'PRO', legend: 'LEGEND' };
 const NEXT_DIFF: Partial<Record<Difficulty, Difficulty>> = { rookie: 'pro', pro: 'legend' };
@@ -29,6 +31,18 @@ export class EndScreen extends Panel {
   private readonly info: HTMLElement;
   private readonly rematch: HTMLButtonElement;
   private readonly menu: HTMLButtonElement;
+  /** NOVA EARNED card: the match reward as it lands on-chain. */
+  private readonly reward: HTMLButtonElement;
+  private readonly rewardAmt: Text;
+  private readonly rewardSub: HTMLElement;
+  private readonly rewardCta: HTMLElement;
+  private rewardShown = false;
+  private unsub: (() => void) | null = null;
+  private tick = 0;
+  private countFrom = 0n;
+  private countRaf = 0;
+  private verifyK: HTMLElement | null = null;
+  private verifyHash: string | null = null;
 
   constructor(private readonly ctx: UIContext) {
     super();
@@ -40,6 +54,21 @@ export class EndScreen extends Panel {
     this.info = div('nb-end-info');
     this.rematch = button(ctx, { label: 'REMATCH', icon: 'replay', variant: 'primary', sound: 'start', onClick: () => ctx.cb.onRestart() });
     this.menu = button(ctx, { label: 'MAIN MENU', icon: 'back', onClick: () => ctx.cb.onQuitToMenu() });
+    this.rewardAmt = document.createTextNode('0');
+    this.rewardSub = span('nb-reward-sub');
+    this.rewardCta = span('nb-reward-cta');
+    this.reward = h(
+      'button',
+      { class: 'nb-reward', type: 'button', 'data-nav': '', 'aria-label': 'NOVA earned' },
+      h('span', { class: 'nb-reward-coin' }, icon('nova')),
+      h('span', { class: 'nb-reward-main' }, h('span', { class: 'nb-reward-amt' }, span('nb-reward-plus', '+'), span('nb-reward-v', this.rewardAmt), span('nb-reward-u', 'NOVA')), this.rewardSub),
+      this.rewardCta,
+    );
+    this.reward.addEventListener('click', () => {
+      ctx.sound('click');
+      const r = chain.state.reward;
+      ctx.open(r?.status === 'confirmed' && chain.affordable().length ? 'garage' : 'wallet');
+    });
     this.el = h(
       'div',
       { class: 'nb-screen nb-end nb-layer' },
@@ -51,14 +80,12 @@ export class EndScreen extends Panel {
         'footer',
         { class: 'nb-end-foot' },
         this.info,
+        this.reward,
         h('div', { class: 'nb-end-actions' }, h('div', { class: 'nb-hints' }, hint([kbd('←'), kbd('→')], [gp('DPAD')], 'NAVIGATE'), hint([kbd('ENTER', true)], [gp('A')], 'SELECT')), this.menu, this.rematch),
       ),
     );
   }
 
-  override defaultFocus(): HTMLElement | null {
-    return this.rematch;
-  }
 
   set(sum: MatchSummary): void {
     const pt = sum.playerTeam;
@@ -124,10 +151,16 @@ export class EndScreen extends Panel {
       h(
         'span',
         { class: 'nb-verify-text' },
-        span('nb-verify-k', 'VERIFIABLE MATCH'),
+        (this.verifyK = span('nb-verify-k', 'VERIFIABLE MATCH')),
         h('span', { class: 'nb-verify-v' }, `SEED ${hex32(c.seed)}`, hasHash ? span('nb-verify-sep', ' · ') : null, hasHash ? `HASH ${hex32(hash)}` : null),
       ),
     );
+    proof.addEventListener('click', () => openUrl(this.verifyHash ? txUrl(this.verifyHash) : null));
+    this.verifyHash = null;
+    this.rewardShown = chain.state.enabled && !c.freePlay && sum.players.some((p) => p.isPlayer);
+    this.el.classList.toggle('has-reward', this.rewardShown);
+    this.countFrom = 0n;
+    this.renderReward();
     this.info.replaceChildren(span('nb-end-info-k', c.freePlay ? 'FREE PLAY' : `${c.teamSize}V${c.teamSize} · ${DIFF_NAME[c.difficulty] ?? c.difficulty} BOTS · ${formatClock(c.durationSec)}`), proof);
   }
 
@@ -190,7 +223,85 @@ export class EndScreen extends Panel {
     return b;
   }
 
+  override defaultFocus(): HTMLElement | null {
+    return this.rematch;
+  }
+
+  override onHide(): void {
+    this.unsub?.();
+    this.unsub = null;
+    window.clearInterval(this.tick);
+    cancelAnimationFrame(this.countRaf);
+  }
+
+  // ------------------------------------------------------------------ NOVA EARNED
+
+  private renderReward(): void {
+    if (!this.rewardShown) return;
+    const r = chain.state.reward;
+    const status = r?.status ?? 'sending';
+    this.reward.className = `nb-reward is-${status}`;
+    this.countTo(r?.amount ?? 0n);
+    const rate = formatNova(chain.state.rewardPerPoint, 2);
+    const pts = r ? `${r.points} PTS × ${rate}` : '';
+    this.rewardSub.replaceChildren(pts ? span('nb-reward-pts', pts) : '', span('nb-reward-status', this.statusText(r)));
+    const can = status === 'confirmed' && chain.affordable().length > 0;
+    this.rewardCta.replaceChildren(
+      status === 'sending' || status === 'pending' || status === 'cooldown' ? icon('spinner', 'nb-spin') : can ? span('nb-reward-cta-l', 'UNLOCK') : icon(status === 'confirmed' ? 'wallet' : 'info'),
+      can ? icon('chevron') : '',
+    );
+    this.reward.classList.toggle('can-spend', can);
+    // the verifiable-match badge links to the on-chain record once it's in
+    if (status === 'confirmed' && r?.hash) {
+      this.verifyHash = r.hash;
+      if (this.verifyK) this.verifyK.textContent = 'RECORDED ON-CHAIN';
+      this.info.querySelector('.nb-verify')?.classList.add('is-onchain');
+    }
+    window.clearInterval(this.tick);
+    if (status === 'cooldown') this.tick = window.setInterval(() => this.renderReward(), 1000);
+  }
+
+  private statusText(r: RewardState | null): string {
+    switch (r?.status) {
+      case undefined:
+      case 'sending':
+        return `RECORDING ON ${NETWORK_LABEL}…`;
+      case 'pending':
+        return `MINTING ON ${NETWORK_LABEL}…`;
+      case 'confirmed':
+        return `MINTED · BALANCE ${formatNova(chain.state.balance)}`;
+      case 'cooldown':
+        return `QUEUED · ARRIVES IN ${Math.max(0, Math.ceil((r.retryAt ?? 0) - Date.now() / 1000))}S`;
+      case 'offline':
+        return 'REWARDS OFFLINE · RELAYER UNREACHABLE';
+      case 'failed':
+        return (r.message ?? 'REWARD FAILED').toUpperCase();
+    }
+  }
+
+  /** Count the amount up from what is shown (900 ms). */
+  private countTo(target: bigint): void {
+    const from = this.countFrom;
+    if (from === target) {
+      this.rewardAmt.nodeValue = formatNova(target);
+      return;
+    }
+    this.countFrom = target;
+    cancelAnimationFrame(this.countRaf);
+    const t0 = performance.now();
+    const step = () => {
+      const k = Math.min(1, (performance.now() - t0) / 900);
+      const e = 1 - (1 - k) ** 3;
+      const v = from + ((target - from) * BigInt(Math.round(e * 1000))) / 1000n;
+      this.rewardAmt.nodeValue = formatNova(v);
+      if (k < 1) this.countRaf = requestAnimationFrame(step);
+    };
+    step();
+  }
+
   override onShow(): void {
+    this.unsub ??= chain.subscribe(() => this.renderReward());
+    this.renderReward();
     const chars = this.headline.querySelectorAll<HTMLElement>('.nb-end-ch');
     chars.forEach((ch, i) =>
       play(
@@ -209,6 +320,7 @@ export class EndScreen extends Panel {
       [this.mine, 720],
       [this.mvp, 780],
       [this.table.el.parentElement, 880],
+      [this.rewardShown ? this.reward : null, 960],
       [this.el.querySelector('.nb-end-foot'), 1000],
     ];
     for (const [el, delay] of seq)

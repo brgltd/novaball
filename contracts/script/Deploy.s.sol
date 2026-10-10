@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Script, console2} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 import {NovaArena} from "../src/NovaArena.sol";
 import {NovaGarage} from "../src/NovaGarage.sol";
@@ -90,11 +91,16 @@ contract Deploy is Script {
         vm.serializeAddress(o, "nova", address(nova));
         vm.serializeAddress(o, "garage", address(garage));
         string memory json = vm.serializeAddress(o, "arena", address(arena));
-        string memory file = string.concat(vm.toString(block.chainid), ".json");
-        vm.writeJson(json, string.concat(vm.projectRoot(), "/deployments/", file));
-        vm.writeJson(json, string.concat(vm.projectRoot(), "/../frontend/src/chain/deployments/", file));
         console2.log("NOVA     ", address(nova));
         console2.log("Garage   ", address(garage));
         console2.log("Arena    ", address(arena));
+        // a simulation (no --broadcast) must not overwrite the real addresses
+        if (vm.isContext(VmSafe.ForgeContext.ScriptDryRun)) {
+            console2.log("dry run: deployment files not written");
+            return;
+        }
+        string memory file = string.concat(vm.toString(block.chainid), ".json");
+        vm.writeJson(json, string.concat(vm.projectRoot(), "/deployments/", file));
+        vm.writeJson(json, string.concat(vm.projectRoot(), "/../frontend/src/chain/deployments/", file));
     }
 }

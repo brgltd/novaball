@@ -3,3 +3,4 @@ out/
 cache/
 # local anvil broadcasts are throwaway (testnet/mainnet broadcasts are kept as a deploy record)
 broadcast/*/31337/
+.anvil/

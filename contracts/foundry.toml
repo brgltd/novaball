@@ -1,0 +1,47 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+# Deploy.s.sol writes the deployed addresses where the web app reads them.
+fs_permissions = [
+  { access = "read-write", path = "./deployments" },
+  { access = "read-write", path = "../frontend/src/chain/deployments" },
+]
+
+[profile.ci]
+fuzz = { runs = 1000 }
+
+[fmt]
+line_length = 120
+bracket_spacing = false
+int_types = "long"
+number_underscore = "thousands"
+
+[rpc_endpoints]
+anvil = "http://127.0.0.1:8545"
+arbitrum_sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+arbitrum = "${ARBITRUM_RPC_URL}"
+
+[etherscan]
+arbitrum_sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 421614 }
+arbitrum = { key = "${ETHERSCAN_API_KEY}", chain = 42161 }
+
+[lint]
+# `name`/`symbol`/`nova` are public ABI names (wallets & explorers read name()/symbol()).
+exclude_lints = [
+  "asm-keccak256",
+  "screaming-snake-case-const",
+  "screaming-snake-case-immutable",
+  "named-struct-fields",
+]
+# Tests cast freely (bytes16("ALICE"), bounded fuzz inputs) and decode base64 by hand.
+ignore = ["test/**/*.sol"]

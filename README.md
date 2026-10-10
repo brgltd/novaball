@@ -11,7 +11,7 @@ frontend/    the game (TypeScript + three.js, Vite) + the chain layer (viem) + t
 contracts/   Solidity + Foundry: NovaToken (ERC-20), NovaGarage (ERC-1155), NovaArena (rewards)
 ```
 
-## The 60-second judge tour
+## The 60-second user tour
 
 1. Open the game. The title screen shows your **NOVA** wallet card (top right) — a guest wallet already exists.
 2. **PLAY** a 2-minute match. On the end screen the **NOVA EARNED** card counts up and flips to *MINTED* when the
@@ -108,9 +108,10 @@ every player's gas costs the game a fraction of a cent per action — that's wha
 economically sane. It's plain EVM, so the same contracts, Foundry scripts and viem code target Arbitrum One unchanged
 (`./deploy.sh arbitrum`, `VITE_CHAIN_ID=42161`).
 
-## Roadmap
+## Further documents
 
-- **Trustless rewards** — the simulation is already deterministic and every match's seed + final state hash is on-chain;
-  the relayer can re-simulate the submitted input log before minting (and later a fraud-proof / co-processor can).
-- **Multiplayer stakes** — lockstep netcode on the same deterministic sim, with NOVA entry fees escrowed by the arena.
-- **Seasons** — leaderboard snapshots and limited-edition cosmetics minted to the top pilots.
+- [Game Design](frontend/docs/DESIGN.md)
+
+## Contact Info
+
+- brgltdxyz@gmail.com

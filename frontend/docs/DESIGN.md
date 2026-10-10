@@ -23,7 +23,7 @@ New in NOVABALL:
 | **ZERO-G SURGE** | Every 60 s of match clock a 3 s warning, then 10 s of low gravity: the ball floats at 30 % gravity, cars fall at 55 % (jumps stay controllable, nobody parks on the ceiling). | Aerial chaos anyone can enjoy; the stadium visibly changes mood (purple grade, swirling stars). Great for demos. |
 | **Mag-lev hover cars** | Vehicles hover 25 cm above any surface on a mag-grip field; stick to walls, fall from ceilings. | Visual identity (glowing hover pads, thruster plumes) instead of wheels. |
 
-Presentation hooks judges will notice in 60 seconds: attract-mode AI match behind the main menu (2v2 PRO bots, a director that
+Presentation hooks users will notice in 60 seconds: attract-mode AI match behind the main menu (2v2 PRO bots, a director that
 cuts to the goal mouth when a goal is coming, re-seeded after 75 s without a goal), goal slow-mo + explosion + replay,
 force-field walls that ripple on impact, reflective neon floor, SUPERNOVA ball, surge color shift, procedural synthwave soundtrack.
 

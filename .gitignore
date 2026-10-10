@@ -35,6 +35,8 @@ npm-debug.log*
 !.vscode/extensions.json
 .idea/
 *.swp
-*~
 .DS_Store
 Thumbs.db
+
+# Claude
+.claude

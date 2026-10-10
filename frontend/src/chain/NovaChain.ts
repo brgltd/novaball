@@ -8,7 +8,7 @@
  * Everything degrades gracefully: no deployment → features off and everything unlocked; RPC down → cached state;
  * relayer down → external wallets with ETH buy directly, rewards say "offline".
  */
-import { createPublicClient, http, parseSignature, type PublicClient } from 'viem';
+import { createPublicClient, hexToString, http, parseSignature, trim, type PublicClient } from 'viem';
 
 import type { MatchSummary } from '../contracts';
 import { novaArenaAbi, novaGarageAbi, novaTokenAbi } from './abi';
@@ -57,6 +57,17 @@ export interface PlayerRecord {
   wins: number;
   points: number;
   earned: bigint;
+}
+
+export interface LeaderRow {
+  rank: number;
+  address: Address;
+  callsign: string;
+  matches: number;
+  wins: number;
+  points: number;
+  earned: bigint;
+  isYou: boolean;
 }
 
 export type RewardStatus = 'sending' | 'pending' | 'confirmed' | 'cooldown' | 'offline' | 'failed';
@@ -279,6 +290,29 @@ export class NovaChain {
       this.state.relayer = 'offline';
     }
     this.emit();
+  }
+
+  // ============================================================================ leaderboard
+
+  /** Every pilot with a record on NovaArena, best first (NOVA earned, then wins). */
+  async leaderboard(limit = 50): Promise<LeaderRow[]> {
+    if (!this.pub || !DEPLOYMENT) return [];
+    const [addrs, recs] = await this.pub.readContract({ address: DEPLOYMENT.arena, abi: novaArenaAbi, functionName: 'getPlayers', args: [0n, 500n] });
+    const me = this.state.wallet?.address.toLowerCase();
+    return addrs
+      .map((address, i) => {
+        const r = recs[i];
+        let callsign = '';
+        try {
+          callsign = hexToString(trim(r.callsign, { dir: 'right' })).replace(/[^A-Z0-9 _\-.]/g, '');
+        } catch {
+          /* not ASCII */
+        }
+        return { rank: 0, address, callsign: callsign || 'PILOT', matches: r.matches, wins: r.wins, points: Number(r.points), earned: r.earned, isYou: address.toLowerCase() === me };
+      })
+      .sort((a, b) => (b.earned > a.earned ? 1 : b.earned < a.earned ? -1 : b.wins - a.wins))
+      .map((row, i) => ({ ...row, rank: i + 1 }))
+      .filter((row) => row.rank <= limit || row.isYou);
   }
 
   // ============================================================================ cosmetics

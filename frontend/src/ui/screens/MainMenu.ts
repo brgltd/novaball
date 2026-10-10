@@ -36,7 +36,12 @@ export class MainMenu extends Panel {
       { id: 'play', label: 'PLAY', desc: 'Exhibition vs AI · 1v1 · 2v2 · 3v3', icon: 'play', primary: true, action: actions.play },
       { id: 'free', label: 'FREE PLAY', desc: 'Just you, the Nova Core and an empty arena', icon: 'freePlay', action: actions.freePlay },
       { id: 'garage', label: 'GARAGE', desc: chain.state.enabled ? 'Cars & paints · unlock NFTs with NOVA' : 'Callsign, body style and paint', icon: 'garage', action: () => ctx.open('garage') },
-      ...(chain.state.enabled ? [{ id: 'wallet', label: 'WALLET', desc: 'NOVA balance, NFTs & on-chain activity', icon: 'wallet' as IconName, action: () => ctx.open('wallet') }] : []),
+      ...(chain.state.enabled
+        ? [
+            { id: 'wallet', label: 'WALLET', desc: 'NOVA balance, NFTs & on-chain activity', icon: 'wallet' as IconName, action: () => ctx.open('wallet') },
+            { id: 'leaderboard', label: 'LEADERBOARD', desc: 'Top pilots, read live from the chain', icon: 'trophy' as IconName, action: () => ctx.open('leaderboard') },
+          ]
+        : []),
       { id: 'settings', label: 'SETTINGS', desc: 'Graphics · camera · audio · controls', icon: 'settings', action: () => ctx.open('settings') },
       { id: 'controls', label: 'CONTROLS', desc: 'Keyboard, mouse and gamepad layout', icon: 'gamepad', action: () => ctx.open('controls') },
     ];

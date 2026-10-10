@@ -3,7 +3,7 @@ import type { UICallbacks, UiSound } from '../contracts';
 import type { Settings } from '../settings';
 import type { MatchConfig } from '../sim/types';
 
-export type PanelName = 'setup' | 'garage' | 'settings' | 'controls' | 'tutorial' | 'wallet';
+export type PanelName = 'setup' | 'garage' | 'settings' | 'controls' | 'tutorial' | 'wallet' | 'leaderboard';
 
 export interface ConfirmOptions {
   title: string;

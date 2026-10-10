@@ -41,6 +41,7 @@ import { PauseMenu } from './screens/PauseMenu';
 import { SettingsPanel } from './screens/SettingsPanel';
 import { Tutorial } from './screens/Tutorial';
 import { WalletPanel } from './screens/WalletPanel';
+import { LeaderboardPanel } from './screens/LeaderboardPanel';
 import { adjustHandlers } from './widgets';
 import { chain } from '../chain';
 import { ownedSetup } from './chainui';
@@ -101,6 +102,7 @@ export class UIManager implements IUIManager {
   private readonly controls: ControlsPanel;
   private readonly tutorial: Tutorial;
   private readonly wallet: WalletPanel;
+  private readonly leaderboard: LeaderboardPanel;
   private readonly confirmDialog: ConfirmDialog;
 
   private screenName: UIScreen = 'none';
@@ -224,9 +226,10 @@ export class UIManager implements IUIManager {
     this.controls = new ControlsPanel(ctx);
     this.tutorial = new Tutorial(ctx);
     this.wallet = new WalletPanel(ctx);
+    this.leaderboard = new LeaderboardPanel(ctx);
     this.confirmDialog = new ConfirmDialog(ctx);
 
-    this.panelLayer = div('nb-panels', this.setup.el, this.garage.el, this.settingsPanel.el, this.controls.el, this.tutorial.el, this.wallet.el, this.confirmDialog.el);
+    this.panelLayer = div('nb-panels', this.setup.el, this.garage.el, this.settingsPanel.el, this.controls.el, this.tutorial.el, this.wallet.el, this.leaderboard.el, this.confirmDialog.el);
 
     this.app = h(
       'div',
@@ -580,6 +583,8 @@ export class UIManager implements IUIManager {
         return this.tutorial;
       case 'wallet':
         return this.wallet;
+      case 'leaderboard':
+        return this.leaderboard;
     }
   }
 

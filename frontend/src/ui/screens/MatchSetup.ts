@@ -19,9 +19,9 @@ const DIFFICULTIES: ReadonlyArray<{ value: Difficulty; name: string; desc: strin
 ];
 
 const DURATIONS: ReadonlyArray<{ value: number; label: string; name: string }> = [
-  { value: 120, label: '2:00', name: 'SPRINT' },
-  { value: 180, label: '3:00', name: 'STANDARD' },
-  { value: 300, label: '5:00', name: 'MARATHON' },
+  { value: 60, label: '1:00', name: 'SPRINT' },
+  { value: 120, label: '2:00', name: 'STANDARD' },
+  { value: 240, label: '4:00', name: 'MARATHON' },
 ];
 
 type MutKey = 'charge' | 'pulse' | 'surges' | 'demolitions';

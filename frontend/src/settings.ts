@@ -71,10 +71,10 @@ export const DEFAULT_SETTINGS: Settings = {
   playerName: 'PLAYER',
   carStyle: 'striker',
   paint: '#e8eef7',
-  lastTeamSize: 2,
+  lastTeamSize: 3,
   lastDifficulty: 'rookie',
-  // 2:00 SPRINT: a first-timer reaches the end screen in ~3 minutes (the first ZERO-G SURGE still comes at 1:00)
-  lastDuration: 120,
+  // 1:00 SPRINT: too short for a ZERO-G SURGE in regulation (they fire when the clock crosses a whole minute)
+  lastDuration: 60,
   lastMutators: { charge: true, pulse: true, surges: true, demolitions: true },
   seenTutorial: false,
 };
@@ -101,7 +101,7 @@ const CHOICES: Partial<Record<keyof Settings, ReadonlyArray<string | number>>> =
   carStyle: CAR_STYLES.map((c) => c.id),
   lastTeamSize: [1, 2, 3],
   lastDifficulty: ['rookie', 'pro', 'legend'],
-  lastDuration: [120, 180, 300],
+  lastDuration: [60, 120, 240],
 };
 const NAME_MAX = 12;
 

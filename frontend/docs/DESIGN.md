@@ -12,7 +12,7 @@ cosmetics — see "On-chain layer"). Multiplayer comes later; the architecture i
 ## 1. Pitch — what's familiar, what's new
 
 Familiar (inspired by car-soccer): cars that drive, boost, jump, double-jump, dodge-flip, air-roll and ride the walls;
-a big ball; two goals; kickoffs; short matches (2:00 by default); boost pads; demolitions; ball-cam.
+a big ball; two goals; kickoffs; short matches (1:00 by default); boost pads; demolitions; ball-cam.
 
 New in NOVABALL:
 
@@ -32,7 +32,7 @@ force-field walls that ripple on impact, reflective neon floor, SUPERNOVA ball, 
 - Teams: **VOLT** (team 0, cyan `#1ec8ff`, the player's team, defends −Z) vs **BLAZE** (team 1, orange `#ff6a1a`, defends +Z).
 - Modes: 1v1, 2v2, 3v3 vs bots (Rookie / Pro / Legend). In 2v2 **Rookie** the player's wingman is a **Pro** bot (its own
   bot manager) against Rookie opponents, so a first match is winnable. Free Play (just you + ball, no clock, `R` resets).
-- Duration: 2 (default, "SPRINT") / 3 / 5 min. Clock runs only in phase `playing`.
+- Duration: 1 (default, "SPRINT") / 2 ("STANDARD") / 4 ("MARATHON") min. Default team size 3v3, difficulty Rookie. Clock runs only in phase `playing`.
 - Tied at 0:00 → **Overtime**, next goal wins (clock counts up).
 - Kickoff: cars on kickoff spots, ball at center, 3-2-1-GO (cars frozen during the countdown).
 - Goal: ball fully crosses the goal line (`|z| > halfLength + ballRadius`). Points = charge level if the charge belongs to the

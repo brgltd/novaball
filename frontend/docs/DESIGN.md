@@ -4,8 +4,8 @@
 > Mag-lev strikers, a living plasma ball that gets more valuable the longer your team keeps it, shockwave pulses,
 > and zero-gravity surges in a holographic stadium floating above a ringed gas giant.
 
-Single-player vs AI (1v1 / 2v2 / 3v3) in the browser. Multiplayer and blockchain integration come later; the
-architecture is built for them (see "Built for on-chain & multiplayer").
+Single-player vs AI (1v1 / 2v2 / 3v3) in the browser, with an on-chain economy on Arbitrum (NOVA rewards, NFT
+cosmetics — see "On-chain layer"). Multiplayer comes later; the architecture is built for it.
 
 ---
 
@@ -167,7 +167,19 @@ scripts/shot.mjs            headless Chrome screenshot/console helper (uses the 
   with `?debug=1`; a normal production page only exposes the read-only `state()`.
 - Saved settings are sanitized on load (bad values fall back to defaults); the boot-failure screen offers RESET SETTINGS.
 
-### Built for on-chain & multiplayer (future)
+### On-chain layer (Arbitrum)
+- `src/chain/` (viem): `NovaChain` is the single service + observable store — wallet (guest key in localStorage, or an
+  EIP-6963 browser wallet), NOVA balance, garage catalog + NFT ownership, activity log, match rewards and purchases.
+  `config.ts` picks the chain (`VITE_CHAIN_ID`) and reads `deployments/<chainId>.json` written by the Foundry deploy
+  script; no deployment ⇒ features off, every cosmetic unlocked.
+- `server/relayer.ts`: the game server. `POST /api/match` records the match on `NovaArena` (mints NOVA);
+  `POST /api/purchase` submits the player's EIP-712 purchase (+ ERC-2612 permit) to `NovaGarage` and pays the gas.
+  Mounted by the Vite dev/preview server (`server/vite.ts`) and the production server (`server/node.ts`).
+- UI: wallet card on the title screen, WALLET panel, garage locks / price tags / BUY, NOVA EARNED card on the end
+  screen (`UIManager` reports the match and enforces ownership of the equipped cosmetics).
+- Contracts, trust model and economy: `../contracts/README.md`.
+
+### Built for on-chain & multiplayer
 - Deterministic sim + input log ⇒ replays can be re-simulated and hashed; a match result can be verified by any node. The end
   screen already shows the match seed and the sim's state hash on the final tick (`MatchSummary.hash`).
 - `MatchConfig.seed` fixes every random decision (kickoff spots, bot noise).
@@ -178,8 +190,8 @@ scripts/shot.mjs            headless Chrome screenshot/console helper (uses the 
 
 - TypeScript strict. ES modules. Import three as `import { X } from 'three'`; addons from `'three/addons/...'` (e.g.
   `three/addons/utils/BufferGeometryUtils.js`); post-processing from `'postprocessing'`.
-- Installed deps ONLY: `three@0.186`, `postprocessing@6.39`, `@fontsource/orbitron`, `@fontsource/rajdhani`, `vite`, `vitest`,
-  `typescript`, `playwright` (dev). Do not add packages.
+- Installed deps ONLY: `three@0.186`, `postprocessing@6.39`, `@fontsource/orbitron`, `@fontsource/rajdhani`, `viem` (chain
+  layer + relayer), `vite`, `vitest`, `typescript`, `playwright` (dev). Do not add packages.
 - Everything procedural — no external asset files or CDNs (fonts come from @fontsource).
 - Only edit files you own (see §6) plus new files inside your own directories. Contract files are read-only — if you truly need a
   change, add an optional member and explain it in your final report.

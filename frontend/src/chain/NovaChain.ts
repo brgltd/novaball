@@ -159,6 +159,8 @@ export class NovaChain {
   private pollTimer = 0;
   private unwatch: () => void = () => {};
   private refreshing: Promise<void> | null = null;
+  /** The wallet whose NFT ownership is loaded (from the chain or this browser's cache). */
+  private ownedFor: string | null = null;
   private readonly reported = new Set<string>();
 
   // ============================================================================ store
@@ -208,6 +210,7 @@ export class NovaChain {
     this.state.owned = new Set();
     this.state.activity = [];
     this.state.record = null;
+    this.ownedFor = null;
     this.loadCache();
     this.emit();
     if (w.kind === 'external') {
@@ -217,6 +220,22 @@ export class NovaChain {
       });
     } else this.unwatch = () => {};
     await this.refresh();
+    void this.settlePending();
+  }
+
+  /** Activity left pending (tab closed before the receipt): look the transactions up again. */
+  private async settlePending(): Promise<void> {
+    const pub = this.pub;
+    if (!pub) return;
+    for (const a of this.state.activity.filter((x) => x.status === 'pending')) {
+      try {
+        const r = await pub.waitForTransactionReceipt({ hash: a.hash, timeout: 20_000 });
+        this.settleActivity(a, r.status === 'success' ? 'confirmed' : 'failed');
+      } catch {
+        if (Date.now() - a.at > 10 * 60_000) this.settleActivity(a, 'failed');
+      }
+    }
+    this.emit();
   }
 
   private async reconnect(): Promise<void> {
@@ -262,6 +281,7 @@ export class NovaChain {
           listed: it.listed,
         }));
         this.state.owned = new Set(inventory.flatMap((own, i) => (own ? [i + 1] : [])));
+        this.ownedFor = who;
         this.state.balance = balance;
         this.state.rewardPerPoint = rewardPerPoint;
         this.state.maxPoints = maxPoints;
@@ -330,7 +350,7 @@ export class NovaChain {
 
   /** Whether ownership is known well enough to enforce locks (fresh read or a cache). */
   get ownershipKnown(): boolean {
-    return !this.state.enabled || this.state.status === 'ready' || this.state.catalog.length > 0;
+    return !this.state.enabled || (this.ownedFor !== null && this.ownedFor === this.state.wallet?.address);
   }
 
   /** Locked, listed items the player can afford right now. */
@@ -552,6 +572,7 @@ export class NovaChain {
       if (!raw) return;
       const c = JSON.parse(raw) as Cache;
       this.state.owned = new Set(c.owned);
+      this.ownedFor = this.state.wallet?.address ?? null;
       this.state.balance = c.balance === null ? null : BigInt(c.balance);
       this.state.activity = c.activity ?? [];
       if (!this.state.catalog.length) this.state.catalog = (c.catalog ?? []).map((i) => ({ ...i, price: BigInt(i.price) }));

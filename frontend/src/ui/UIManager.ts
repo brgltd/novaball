@@ -121,6 +121,8 @@ export class UIManager implements IUIManager {
   private saveTimer = 0;
   private readonly unsubDevice: () => void;
   private readonly unsubChain: () => void;
+  /** Ownership is enforced once the game has booted (its systems receive the settings change). */
+  private bootDone = false;
   private disposed = false;
 
   // --- end-screen input lock (UI-1)
@@ -292,6 +294,10 @@ export class UIManager implements IUIManager {
     if (s === prev && s !== 'main') return;
     this.screenName = s;
     this.app.setAttribute('data-screen', s);
+    if (s !== 'loading' && !this.bootDone) {
+      this.bootDone = true;
+      this.enforceOwnership();
+    }
     if (s !== 'loading') this.loading.el.classList.remove('is-boot');
 
     this.loading.el.classList.toggle('is-on', s === 'loading');
@@ -688,7 +694,7 @@ export class UIManager implements IUIManager {
 
   /** A cosmetic the wallet does not own (another wallet, a reset chain) falls back to the starter kit. */
   private enforceOwnership(): void {
-    if (!chain.ownershipKnown) return;
+    if (!this.bootDone || !chain.ownershipKnown) return;
     const s = this.settings;
     const own = ownedSetup(s.carStyle, s.paint);
     if (own.style === s.carStyle && own.paint === s.paint) return;

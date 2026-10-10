@@ -3,23 +3,27 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "NOVABALL — hover-car football in a zero-G space arena (single-player vs AI). Browser game built with three.js.",
+  "description": "NOVABALL \u2014 hover-car football in a zero-G space arena (single-player vs AI). Browser game built with three.js.",
   "engines": {
     "node": ">=22.12"
   },
   "scripts": {
     "dev": "vite",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning server/node.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "sync-abis": "node scripts/sync-abis.mjs"
   },
   "dependencies": {
     "@fontsource/orbitron": "^5.3.0",
     "@fontsource/rajdhani": "^5.3.0",
     "postprocessing": "^6.39.5",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "viem": "^2.57.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

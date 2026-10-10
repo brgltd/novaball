@@ -13,8 +13,8 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "useDefineForClassFields": true,
-    "allowImportingTsExtensions": false,
+    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "tests", "dev", "vite.config.ts"]
+  "include": ["src", "server", "tests", "dev", "vite.config.ts"]
 }

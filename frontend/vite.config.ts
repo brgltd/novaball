@@ -1,11 +1,18 @@
 import { defineConfig } from 'vitest/config';
 
+import { relayerPlugin } from './server/vite.ts';
+
+/** Local chain: the browser reaches anvil through the dev server, so the game also works from another device on the LAN. */
+const anvilProxy = { target: 'http://127.0.0.1:8545', changeOrigin: true, rewrite: () => '/' };
+
 export default defineConfig({
   // Relative asset URLs: the production build works from any path (site root, a GitHub Pages project subpath such
   // as /novaball/, an IPFS gateway, ...). The dev server is unaffected.
   base: './',
-  server: { port: 5173, host: true },
-  preview: { port: 4173, host: true },
+  // The NOVABALL relayer (game server + gas sponsor) at /api on `vite` and `vite preview`.
+  plugins: [relayerPlugin()],
+  server: { port: 5173, host: true, proxy: { '/rpc': anvilProxy } },
+  preview: { port: 4173, host: true, proxy: { '/rpc': anvilProxy } },
   build: {
     target: 'es2022',
     sourcemap: false,

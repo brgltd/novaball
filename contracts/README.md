@@ -4,42 +4,38 @@ Solidity 0.8.28 · Foundry · OpenZeppelin 5.4 · deployed on **Arbitrum**.
 
 | Contract | Standard | Role |
 |---|---|---|
-| [`NovaToken`](src/NovaToken.sol) | ERC-20 + ERC-2612 permit + burnable | **NOVA**, the game token. Minted only by the arena (`MINTER_ROLE`). |
-| [`NovaArena`](src/NovaArena.sol) | AccessControl | Records finished matches (seed + deterministic final state hash + score) and mints `points × rewardPerPoint` NOVA to every human player. Keeps a career record per player (matches, wins, points, NOVA earned, callsign) for the leaderboard. |
-| [`NovaGarage`](src/NovaGarage.sol) | ERC-1155 + EIP-712 | The cosmetics shop: one token id per car body / paint. Buying burns the NOVA price and mints the NFT. Metadata **and art** are fully on-chain ([`NovaArt`](src/NovaArt.sol)). |
+| [`NovaToken`](src/NovaToken.sol) | ERC-20 + ERC-2612 permit + burnable | **NOVA**, the game token. Minted only by the arena (`MINTER_ROLE`), spent only in the garage (`SPENDER_ROLE`). |
+| [`NovaArena`](src/NovaArena.sol) | AccessControl | Players claim finished matches: stores the seed + deterministic final state hash + score and mints `points × rewardPerPoint` NOVA to the claimer. Keeps a career record per player (matches, wins, points, NOVA earned, callsign) for the leaderboard. |
+| [`NovaGarage`](src/NovaGarage.sol) | ERC-1155 | The cosmetics shop: one token id per car body / paint. Buying burns the NOVA price and mints the NFT. Metadata **and art** are fully on-chain ([`NovaArt`](src/NovaArt.sol)). |
 
 ```
- player plays a match ──► relayer (GAME_SERVER_ROLE) ──► NovaArena.recordMatch ──► NovaToken.mint(player, points × rate)
- player signs Purchase (+ Permit) ──► relayer ──► NovaGarage.buyForWithPermit ──► NOVA burned, NFT minted to player
+ player finishes a match ──► NovaArena.claim(result, team, points, callsign) ──► NovaToken.mint(player, points × rate)
+ player buys a cosmetic  ──► NovaGarage.buy(id, maxPrice) ──► NovaToken.spend(player, price) (burn) + NFT minted
 ```
 
-## Gasless by design
+Both are a single transaction sent (and paid for) by the player's own wallet.
 
-Players never need ETH:
+## One transaction per action
 
-- **Rewards** are pushed by the game server — the player does nothing.
-- **Purchases** are authorized with signatures only. The buyer signs an EIP-712 `Purchase(buyer, itemId, maxPrice, nonce, deadline)`
-  and, if the garage has no allowance yet, an ERC-2612 `Permit` for the price. Anyone (the relayer) can submit them with
-  `buyFor` / `buyForWithPermit` and pay the gas. `maxPrice` protects the buyer if the price changes in between; the nonce
-  makes every signature single-use; a front-run permit cannot block the purchase (`try permit {} catch {}`);
-  `SignatureChecker` also accepts ERC-1271 smart-contract wallets.
-- A wallet with ETH can of course call `buy(id, maxPrice)` directly after `approve`.
+- **Claim**: `claim(MatchResult, team, points, callsign)` — `msg.sender` is the player, so nobody can claim for someone
+  else. The match id is `keccak256(abi.encode(player, result))`.
+- **Buy**: the garage holds NOVA's `SPENDER_ROLE`, so `buy(id, maxPrice)` burns the price straight from `msg.sender` —
+  no `approve` transaction first. The garage can only spend from the buyer that calls it. `maxPrice` protects the buyer
+  if the price changes while the transaction is pending.
 
 ## Trust model (what the contracts enforce)
 
-Matches are simulated in the browser, so the reported points can't be proven on-chain today. The arena bounds what a
-single report can do:
+Matches are simulated in the browser, so the claimed points can't be proven on-chain today. The arena bounds what a
+claim can do:
 
-- only `GAME_SERVER_ROLE` can record matches — and the relayer only files a report signed by the player (EIP-712
-  `MatchReport`; a browser wallet delegates once to a session key so rewards never prompt), so nobody can burn another
-  player's cooldown; per-IP, per-player and global per-minute budgets cap the relayer's gas spend;
-- points per player per match are capped (`maxPointsPerMatch`, default 3000);
-- a player can be rewarded at most once per `matchCooldown` (default 60 s — a real match lasts ≥ 2 min);
-- an identical report can't be recorded twice;
-- the match **seed** and the simulation's **final state hash** are stored in the `MatchRecorded` event. The game's
+- points per match are capped (`maxPointsPerMatch`, default 3000);
+- a player can claim at most once per `matchCooldown` (default 60 s — a real match lasts ≥ 2 min);
+- the same match can't be claimed twice by the same player;
+- every claim costs the player gas;
+- the match **seed** and the simulation's **final state hash** are stored in the `MatchClaimed` event. The game's
   simulation is deterministic (fixed step, no `Math.random` / transcendental functions), so the same seed + input log
-  reproduces the same hash: anyone holding a replay can audit a reward, and server-side re-simulation is the natural
-  next step to make rewards fully trustless.
+  reproduces the same hash: anyone holding a replay can audit a reward, and server-side re-simulation (a signed
+  attestation checked by `claim`) is the natural next step to make rewards fully trustless.
 
 ## Economy (all adjustable)
 
@@ -61,9 +57,9 @@ Catalog: cars `viper`, `titan`; paints `graphite`, `obsidian`, `chrome`, `crimso
 
 ```bash
 forge build
-forge test            # 42 tests incl. fuzzing (signatures, permits, caps, cooldowns, on-chain metadata)
+forge test            # 36 tests incl. fuzzing (claims, caps, cooldowns, purchases, on-chain metadata)
 
-# local chain — easiest: `npm run dev:local` in ../frontend (anvil + deploy + game + relayer)
+# local chain — easiest: `npm run dev:local` in ../frontend (anvil + deploy + game)
 anvil &
 ./deploy.sh anvil
 
@@ -76,5 +72,5 @@ cp .env.example .env  # set PRIVATE_KEY (+ ETHERSCAN_API_KEY to verify on Arbisc
 `deployments/<chainId>.json` and `../frontend/src/chain/deployments/<chainId>.json` (a dry run without `--broadcast`
 writes nothing). Deploying costs ≈ 0.001 ETH on Arbitrum Sepolia.
 
-Roles after deployment: the deployer is admin of all three contracts and curator of the garage; the relayer address
-(`RELAYER_ADDRESS`, default = deployer) holds `GAME_SERVER_ROLE`; the arena holds `MINTER_ROLE`.
+Roles after deployment: the deployer is admin of all three contracts and curator of the garage; the arena holds
+NOVA's `MINTER_ROLE` and the garage holds NOVA's `SPENDER_ROLE`.

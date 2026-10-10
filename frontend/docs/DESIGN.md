@@ -168,15 +168,15 @@ scripts/shot.mjs            headless Chrome screenshot/console helper (uses the 
 - Saved settings are sanitized on load (bad values fall back to defaults); the boot-failure screen offers RESET SETTINGS.
 
 ### On-chain layer (Arbitrum)
-- `src/chain/` (viem): `NovaChain` is the single service + observable store — wallet (guest key in localStorage, or an
-  EIP-6963 browser wallet), NOVA balance, garage catalog + NFT ownership, activity log, match rewards and purchases.
-  `config.ts` picks the chain (`VITE_CHAIN_ID`) and reads `deployments/<chainId>.json` written by the Foundry deploy
-  script; no deployment ⇒ features off, every cosmetic unlocked.
-- `server/relayer.ts`: the game server. `POST /api/match` records the match on `NovaArena` (mints NOVA);
-  `POST /api/purchase` submits the player's EIP-712 purchase (+ ERC-2612 permit) to `NovaGarage` and pays the gas.
-  Mounted by the Vite dev/preview server (`server/vite.ts`) and the production server (`server/node.ts`).
-- UI: wallet card on the title screen, WALLET panel, garage locks / price tags / BUY, NOVA EARNED card on the end
-  screen (`UIManager` reports the match and enforces ownership of the equipped cosmetics).
+- `src/chain/` (viem): `NovaChain` is the single service + observable store — the player's browser wallet (EIP-6963:
+  MetaMask, Brave Wallet, Phantom…), NOVA + ETH balances, garage catalog + NFT ownership, activity log, the last match's
+  unclaimed reward (kept in localStorage until claimed), claims and purchases. Both are transactions sent by the
+  player's wallet (`NovaArena.claim`, `NovaGarage.buy`), simulated first for readable errors. `config.ts` picks the
+  chain (`VITE_CHAIN_ID`) and reads `deployments/<chainId>.json` written by the Foundry deploy script; no deployment ⇒
+  features off, every cosmetic unlocked. There is no backend.
+- UI: wallet card on the title screen, WALLET panel (connect, gas + faucet links, unclaimed reward), garage locks /
+  price tags / BUY, the CLAIM REWARDS card on the end screen (`UIManager` reports the match and enforces ownership of
+  the equipped cosmetics).
 - Contracts, trust model and economy: `../contracts/README.md`.
 
 ### Built for on-chain & multiplayer
@@ -191,7 +191,7 @@ scripts/shot.mjs            headless Chrome screenshot/console helper (uses the 
 - TypeScript strict. ES modules. Import three as `import { X } from 'three'`; addons from `'three/addons/...'` (e.g.
   `three/addons/utils/BufferGeometryUtils.js`); post-processing from `'postprocessing'`.
 - Installed deps ONLY: `three@0.186`, `postprocessing@6.39`, `@fontsource/orbitron`, `@fontsource/rajdhani`, `viem` (chain
-  layer + relayer), `vite`, `vitest`, `typescript`, `playwright` (dev). Do not add packages.
+  layer), `vite`, `vitest`, `typescript`, `playwright` (dev). Do not add packages.
 - Everything procedural — no external asset files or CDNs (fonts come from @fontsource).
 - Only edit files you own (see §6) plus new files inside your own directories. Contract files are read-only — if you truly need a
   change, add an optional member and explain it in your final report.

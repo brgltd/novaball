@@ -16,7 +16,10 @@ import { lazyRelayer } from './lazy.ts';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = join(root, 'dist');
 const port = Number(process.env.PORT || 8787);
-const relay = lazyRelayer(process.env, 421614, join(root, 'src/chain/deployments'));
+const chainId = Number(process.env.CHAIN_ID || process.env.VITE_CHAIN_ID || 421614);
+const relay = lazyRelayer(process.env, chainId, join(root, 'src/chain/deployments'));
+/** A build for the local chain (VITE_CHAIN_ID=31337) talks to anvil through /rpc, like the dev server. */
+const anvil = chainId === 31337 ? process.env.RPC_URL || 'http://127.0.0.1:8545' : null;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -35,6 +38,10 @@ createServer((req, res) => {
   const url = req.url ?? '/';
   if (url === '/api' || url.startsWith('/api/')) {
     void serveFetch(relay, req, res, url);
+    return;
+  }
+  if (anvil && url === '/rpc') {
+    void serveFetch((r) => fetch(anvil, { method: 'POST', headers: { 'content-type': 'application/json' }, body: r.body, duplex: 'half' } as RequestInit), req, res, url);
     return;
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') {

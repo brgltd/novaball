@@ -117,8 +117,10 @@ export function createRelayer(opts: RelayerOptions) {
   const wallet = createWalletClient({ chain, transport, account });
   const { arena, garage } = opts.deployment;
   const log = opts.log ?? ((m: string) => console.log(m));
+  // matches: the contract's cooldown is the real limit; purchases: bounded by the buyer's NOVA anyway
   const perPlayer = new Limiter(3, 60_000);
-  const perIp = new Limiter(40, 60_000);
+  const perBuyer = new Limiter(12, 60_000);
+  const perIp = new Limiter(60, 60_000);
 
   // ------------------------------------------------------------------ routes
 
@@ -153,7 +155,7 @@ export function createRelayer(opts: RelayerOptions) {
 
   async function purchase(body: unknown): Promise<TxReceiptRef> {
     const p = parsePurchase(body);
-    limit(perPlayer, `p:${p.buyer.toLowerCase()}`);
+    limit(perBuyer, `p:${p.buyer.toLowerCase()}`);
     const base = [p.buyer, BigInt(p.itemId), BigInt(p.maxPrice), BigInt(p.deadline), p.signature] as const;
     let hash: Hex;
     if (p.permit) {

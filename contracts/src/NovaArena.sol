@@ -76,6 +76,7 @@ contract NovaArena is AccessControl {
     error NoPlayers();
     error TooManyPlayers();
     error ZeroAddress();
+    error InvalidTeam(uint8 team);
     error AlreadyRecorded(bytes32 matchId);
     error PointsAboveCap(address player, uint32 points, uint32 cap);
     error CooldownActive(address player, uint256 readyAt);
@@ -173,6 +174,7 @@ contract NovaArena is AccessControl {
 
     function _reward(bytes32 matchId, int8 winner, PlayerResult calldata p) private {
         if (p.player == address(0)) revert ZeroAddress();
+        if (p.team > 1) revert InvalidTeam(p.team);
         if (p.points > maxPointsPerMatch) revert PointsAboveCap(p.player, p.points, maxPointsPerMatch);
         PlayerRecord storage r = _records[p.player];
         if (r.matches == 0) {

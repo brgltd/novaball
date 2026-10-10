@@ -3,15 +3,18 @@
 //   1. starts anvil on :8545 (unless one is already running), persisting its state in contracts/.anvil/
 //   2. deploys the contracts if they are not on that chain yet (contracts/script/Deploy.s.sol)
 //   3. starts the Vite dev server — the game + the relayer at /api + an /rpc proxy to anvil
+//   --fresh   start from an empty chain and redeploy (after changing the contracts)
 // Needs Foundry (https://getfoundry.sh). Ctrl+C stops everything.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const frontend = fileURLToPath(new URL('..', import.meta.url));
 const contracts = fileURLToPath(new URL('../../contracts/', import.meta.url));
 const RPC = 'http://127.0.0.1:8545';
 const children = [];
+const fresh = process.argv.includes('--fresh');
+const viteArgs = process.argv.slice(2).filter((a) => a !== '--fresh');
 
 const log = (m) => console.log(`\x1b[36m[dev:local]\x1b[0m ${m}`);
 
@@ -36,7 +39,7 @@ function need(bin) {
 }
 
 function stopAll() {
-  for (const c of children) if (!c.killed) c.kill('SIGINT');
+  for (const c of children) if (!c.killed) c.kill('SIGTERM');
 }
 process.on('SIGINT', () => {
   stopAll();
@@ -52,6 +55,7 @@ if (await chainUp()) {
   log('anvil already running on :8545');
 } else {
   need('anvil');
+  if (fresh) rmSync(`${contracts}.anvil`, { recursive: true, force: true });
   mkdirSync(`${contracts}.anvil`, { recursive: true });
   log('starting anvil (state persisted in contracts/.anvil/state.json)');
   const anvil = spawn('anvil', ['--silent', '--state', `${contracts}.anvil/state.json`, '--state-interval', '5'], { stdio: 'inherit' });
@@ -68,7 +72,7 @@ if (await chainUp()) {
 // ---------------------------------------------------------------- 2. contracts
 const deploymentFile = `${frontend}src/chain/deployments/31337.json`;
 let deployed = false;
-if (existsSync(deploymentFile)) {
+if (existsSync(deploymentFile) && !fresh) {
   const { nova } = JSON.parse(readFileSync(deploymentFile, 'utf8'));
   deployed = ((await rpc('eth_getCode', [nova, 'latest'])) ?? '0x') !== '0x';
 }
@@ -88,7 +92,7 @@ if (deployed) {
 
 // ---------------------------------------------------------------- 3. game + relayer
 log('starting the game (Vite) — the relayer is served at /api, anvil at /rpc');
-const vite = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['vite', ...process.argv.slice(2)], {
+const vite = spawn(process.execPath, [`${frontend}node_modules/vite/bin/vite.js`, ...viteArgs], {
   cwd: frontend,
   stdio: 'inherit',
   env: { ...process.env, VITE_CHAIN_ID: '31337' },

@@ -105,6 +105,17 @@ contract NovaArenaTest is BaseTest {
         vm.stopPrank();
     }
 
+    function test_recordMatch_rejectsInvalidTeam() public {
+        // team 255 would read as int8(-1) and count as a "win" on a draw
+        NovaArena.MatchResult memory m = _result(1);
+        m.winner = -1;
+        NovaArena.PlayerResult[] memory ps = _solo(alice, 10);
+        ps[0].team = 255;
+        vm.expectRevert(abi.encodeWithSelector(NovaArena.InvalidTeam.selector, 255));
+        vm.prank(server);
+        arena.recordMatch(m, ps);
+    }
+
     function test_recordMatch_emptyCallsignKeepsStoredOne() public {
         vm.prank(server);
         arena.recordMatch(_result(1), _solo(alice, 10));

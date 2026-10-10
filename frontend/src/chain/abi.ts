@@ -3037,6 +3037,17 @@ export const novaArenaAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidTeam",
+    "inputs": [
+      {
+        "name": "team",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NoPlayers",
     "inputs": []
   },

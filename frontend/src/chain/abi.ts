@@ -53,6 +53,19 @@ export const novaTokenAbi = [
   },
   {
     "type": "function",
+    "name": "SPENDER_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "allowance",
     "inputs": [
       {
@@ -390,6 +403,24 @@ export const novaTokenAbi = [
         "name": "account",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "spend",
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -864,32 +895,6 @@ export const novaGarageAbi = [
   },
   {
     "type": "function",
-    "name": "DOMAIN_SEPARATOR",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "PURCHASE_TYPEHASH",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "addItem",
     "inputs": [
       {
@@ -995,104 +1000,6 @@ export const novaGarageAbi = [
   },
   {
     "type": "function",
-    "name": "buyFor",
-    "inputs": [
-      {
-        "name": "buyer",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxPrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "deadline",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "signature",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "buyForWithPermit",
-    "inputs": [
-      {
-        "name": "buyer",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxPrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "deadline",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "signature",
-        "type": "bytes",
-        "internalType": "bytes"
-      },
-      {
-        "name": "permit",
-        "type": "tuple",
-        "internalType": "struct NovaGarage.PermitSig",
-        "components": [
-          {
-            "name": "value",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "deadline",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "v",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "r",
-            "type": "bytes32",
-            "internalType": "bytes32"
-          },
-          {
-            "name": "s",
-            "type": "bytes32",
-            "internalType": "bytes32"
-          }
-        ]
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "catalog",
     "inputs": [],
     "outputs": [
@@ -1132,49 +1039,6 @@ export const novaGarageAbi = [
             "internalType": "string"
           }
         ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "eip712Domain",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "fields",
-        "type": "bytes1",
-        "internalType": "bytes1"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "version",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "chainId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "verifyingContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "salt",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "extensions",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
       }
     ],
     "stateMutability": "view"
@@ -1386,25 +1250,6 @@ export const novaGarageAbi = [
   },
   {
     "type": "function",
-    "name": "nonces",
-    "inputs": [
-      {
-        "name": "owner",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "nova",
     "inputs": [],
     "outputs": [
@@ -1412,45 +1257,6 @@ export const novaGarageAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract NovaToken"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "purchaseDigest",
-    "inputs": [
-      {
-        "name": "buyer",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxPrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "nonce",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "deadline",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -1703,12 +1509,6 @@ export const novaGarageAbi = [
         "internalType": "bool"
       }
     ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "EIP712DomainChanged",
-    "inputs": [],
     "anonymous": false
   },
   {
@@ -2143,22 +1943,6 @@ export const novaGarageAbi = [
   },
   {
     "type": "error",
-    "name": "InvalidAccountNonce",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "currentNonce",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "InvalidLabel",
     "inputs": [
       {
@@ -2167,16 +1951,6 @@ export const novaGarageAbi = [
         "internalType": "string"
       }
     ]
-  },
-  {
-    "type": "error",
-    "name": "InvalidShortString",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidSignature",
-    "inputs": []
   },
   {
     "type": "error",
@@ -2207,28 +1981,6 @@ export const novaGarageAbi = [
         "name": "maxPrice",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "SignatureExpired",
-    "inputs": [
-      {
-        "name": "deadline",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "StringTooLong",
-    "inputs": [
-      {
-        "name": "str",
-        "type": "string",
-        "internalType": "string"
       }
     ]
   },
@@ -2292,26 +2044,100 @@ export const novaArenaAbi = [
   },
   {
     "type": "function",
-    "name": "GAME_SERVER_ROLE",
-    "inputs": [],
+    "name": "claim",
+    "inputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct NovaArena.MatchResult",
+        "components": [
+          {
+            "name": "seed",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "stateHash",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "teamSize",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "difficulty",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "durationSec",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "scoreVolt",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "scoreBlaze",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "winner",
+            "type": "int8",
+            "internalType": "int8"
+          },
+          {
+            "name": "overtime",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      },
+      {
+        "name": "team",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "points",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "callsign",
+        "type": "bytes16",
+        "internalType": "bytes16"
+      }
+    ],
     "outputs": [
       {
-        "name": "",
+        "name": "matchId",
         "type": "bytes32",
         "internalType": "bytes32"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "MAX_PLAYERS",
-    "inputs": [],
+    "name": "claimed",
+    "inputs": [
+      {
+        "name": "matchId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -2543,99 +2369,6 @@ export const novaArenaAbi = [
   },
   {
     "type": "function",
-    "name": "recordMatch",
-    "inputs": [
-      {
-        "name": "result",
-        "type": "tuple",
-        "internalType": "struct NovaArena.MatchResult",
-        "components": [
-          {
-            "name": "seed",
-            "type": "uint64",
-            "internalType": "uint64"
-          },
-          {
-            "name": "stateHash",
-            "type": "uint32",
-            "internalType": "uint32"
-          },
-          {
-            "name": "teamSize",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "difficulty",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "durationSec",
-            "type": "uint16",
-            "internalType": "uint16"
-          },
-          {
-            "name": "scoreVolt",
-            "type": "uint16",
-            "internalType": "uint16"
-          },
-          {
-            "name": "scoreBlaze",
-            "type": "uint16",
-            "internalType": "uint16"
-          },
-          {
-            "name": "winner",
-            "type": "int8",
-            "internalType": "int8"
-          },
-          {
-            "name": "overtime",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      },
-      {
-        "name": "players",
-        "type": "tuple[]",
-        "internalType": "struct NovaArena.PlayerResult[]",
-        "components": [
-          {
-            "name": "player",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "team",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "points",
-            "type": "uint32",
-            "internalType": "uint32"
-          },
-          {
-            "name": "callsign",
-            "type": "bytes16",
-            "internalType": "bytes16"
-          }
-        ]
-      }
-    ],
-    "outputs": [
-      {
-        "name": "matchId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "recordOf",
     "inputs": [
       {
@@ -2681,25 +2414,6 @@ export const novaArenaAbi = [
             "internalType": "bytes16"
           }
         ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "recorded",
-    "inputs": [
-      {
-        "name": "matchId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -2797,7 +2511,7 @@ export const novaArenaAbi = [
   },
   {
     "type": "event",
-    "name": "MatchRecorded",
+    "name": "MatchClaimed",
     "inputs": [
       {
         "name": "matchId",
@@ -2806,52 +2520,81 @@ export const novaArenaAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "seed",
-        "type": "uint64",
-        "indexed": false,
-        "internalType": "uint64"
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       },
       {
-        "name": "stateHash",
+        "name": "result",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct NovaArena.MatchResult",
+        "components": [
+          {
+            "name": "seed",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "stateHash",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "teamSize",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "difficulty",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "durationSec",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "scoreVolt",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "scoreBlaze",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "winner",
+            "type": "int8",
+            "internalType": "int8"
+          },
+          {
+            "name": "overtime",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      },
+      {
+        "name": "team",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "points",
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
       },
       {
-        "name": "teamSize",
-        "type": "uint8",
+        "name": "amount",
+        "type": "uint256",
         "indexed": false,
-        "internalType": "uint8"
-      },
-      {
-        "name": "difficulty",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "uint8"
-      },
-      {
-        "name": "durationSec",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "scoreVolt",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "scoreBlaze",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "winner",
-        "type": "int8",
-        "indexed": false,
-        "internalType": "int8"
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -2877,37 +2620,6 @@ export const novaArenaAbi = [
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RewardPaid",
-    "inputs": [
-      {
-        "name": "matchId",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "player",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "points",
-        "type": "uint32",
-        "indexed": false,
-        "internalType": "uint32"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -3010,7 +2722,7 @@ export const novaArenaAbi = [
   },
   {
     "type": "error",
-    "name": "AlreadyRecorded",
+    "name": "AlreadyClaimed",
     "inputs": [
       {
         "name": "matchId",
@@ -3023,11 +2735,6 @@ export const novaArenaAbi = [
     "type": "error",
     "name": "CooldownActive",
     "inputs": [
-      {
-        "name": "player",
-        "type": "address",
-        "internalType": "address"
-      },
       {
         "name": "readyAt",
         "type": "uint256",
@@ -3048,18 +2755,8 @@ export const novaArenaAbi = [
   },
   {
     "type": "error",
-    "name": "NoPlayers",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "PointsAboveCap",
     "inputs": [
-      {
-        "name": "player",
-        "type": "address",
-        "internalType": "address"
-      },
       {
         "name": "points",
         "type": "uint32",
@@ -3087,15 +2784,5 @@ export const novaArenaAbi = [
         "internalType": "uint256"
       }
     ]
-  },
-  {
-    "type": "error",
-    "name": "TooManyPlayers",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ZeroAddress",
-    "inputs": []
   }
 ] as const;

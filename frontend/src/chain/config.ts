@@ -2,21 +2,19 @@
  * Which chain the game talks to, and where. Build-time env (all optional):
  *   VITE_CHAIN_ID       31337 (local anvil; default in `vite` dev) | 421614 (Arbitrum Sepolia; default in builds) | 42161
  *   VITE_RPC_URL        JSON-RPC endpoint (default: the chain's public RPC; local: the dev server's /rpc proxy to anvil)
- *   VITE_RELAYER_URL    relayer base URL (default: same-origin /api)
  * Contract addresses come from ./deployments/<chainId>.json, written by contracts/script/Deploy.s.sol. Without a
  * deployment for the chain, on-chain features are off and every cosmetic is unlocked (the game is unchanged).
  */
 import type { Chain } from 'viem';
 import { arbitrum, arbitrumSepolia, foundry } from 'viem/chains';
 
-import type { Address } from './api';
+import type { Address } from './types';
 
 export interface Deployment {
   chainId: number;
   nova: Address;
   garage: Address;
   arena: Address;
-  relayer: Address;
   startBlock?: number;
 }
 
@@ -52,12 +50,26 @@ export const RPC_URL: string = env.VITE_RPC_URL || (IS_LOCAL ? `${origin()}/rpc`
 /** The RPC URL handed to an external wallet when it has to add the network. */
 export const WALLET_RPC_URL: string = IS_LOCAL ? 'http://127.0.0.1:8545' : RPC_URL;
 
-export const RELAYER_URL: string = String(env.VITE_RELAYER_URL || `${origin()}/api`).replace(/\/+$/, '');
-
 export const EXPLORER: string | null = CHAIN.blockExplorers?.default.url ?? null;
 
 /** Short network label for badges. */
 export const NETWORK_LABEL = IS_LOCAL ? 'LOCAL ANVIL' : CHAIN_ID === arbitrumSepolia.id ? 'ARBITRUM SEPOLIA' : CHAIN_ID === arbitrum.id ? 'ARBITRUM ONE' : CHAIN.name.toUpperCase();
+
+/** Where to get gas money for the game's chain (testnet faucets, the bridge). */
+export const GAS_SOURCES: ReadonlyArray<{ name: string; url: string }> =
+  CHAIN_ID === arbitrumSepolia.id
+    ? [
+        { name: 'QuickNode faucet', url: 'https://faucet.quicknode.com/arbitrum/sepolia' },
+        { name: 'Alchemy faucet', url: 'https://www.alchemy.com/faucets/arbitrum-sepolia' },
+        { name: 'Bridge from Sepolia', url: 'https://bridge.arbitrum.io/?destinationChain=arbitrum-sepolia&sourceChain=sepolia' },
+      ]
+    : CHAIN_ID === arbitrum.id
+      ? [{ name: 'Arbitrum bridge', url: 'https://bridge.arbitrum.io/' }]
+      : [];
+
+/** Gas units of a first reward claim (measured: ~215k) and of a garage purchase (~75k), with headroom. */
+export const CLAIM_GAS = 260_000n;
+export const BUY_GAS = 110_000n;
 
 export function txUrl(hash: string): string | null {
   return EXPLORER ? `${EXPLORER}/tx/${hash}` : null;

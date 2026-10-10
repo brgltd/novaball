@@ -1,12 +1,12 @@
 /**
  * GARAGE: pilot callsign, body style, paint. Owned cosmetics save to settings live.
  * On-chain: STRIKER + ARCTIC are free; every other body / paint is an NFT bought with NOVA. Picking a locked one
- * previews it on the stage with a price tag and a BUY button (gasless: the player signs, the relayer pays).
+ * previews it on the stage with a price tag and a BUY button (one transaction from the player's wallet).
  */
-import { chain, formatNova, NETWORK_LABEL, type CatalogItem, type CosmeticKind } from '../../chain';
+import { BUY_GAS, chain, formatNova, NETWORK_LABEL, type CatalogItem, type CosmeticKind } from '../../chain';
 import type { CarStyleId } from '../../sim/types';
 import { CAR_STYLES, PAINTS, TEAMS } from '../../theme';
-import { novaAmount, paintKey } from '../chainui';
+import { gasEstimate, novaAmount, paintKey } from '../chainui';
 import { Panel, type UIContext } from '../core';
 import { div, h, span, textNode, setText, play } from '../dom';
 import { carSvg } from '../icons';
@@ -189,7 +189,7 @@ export class Garage extends Panel {
         'div',
         { class: 'nb-gar-note' },
         onChain
-          ? `STRIKER and ARCTIC are free. Every other body and paint is an ERC-1155 NFT on ${NETWORK_LABEL.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, bought with NOVA you earn in matches — the NOVA is burned and the gas is on us.`
+          ? `STRIKER and ARCTIC are free. Every other body and paint is an ERC-1155 NFT on ${NETWORK_LABEL.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, bought with NOVA you claim from your matches. The NOVA is burned; your wallet pays a tiny gas fee.`
           : 'Trims, hover pads and thrusters always glow in your team color.',
       ),
     );
@@ -350,7 +350,7 @@ export class Garage extends Panel {
     const paint = pk ? chain.item('paint', pk) : null;
     if (paint && !chain.unlocked('paint', pk!)) items.push(paint);
     const st = chain.state;
-    const key = items.map((i) => `${i.id}:${i.price}:${st.purchases.get(i.id)?.status ?? ''}:${st.purchases.get(i.id)?.message ?? ''}`).join('|') + `|${st.balance}`;
+    const key = items.map((i) => `${i.id}:${i.price}:${st.purchases.get(i.id)?.status ?? ''}:${st.purchases.get(i.id)?.message ?? ''}`).join('|') + `|${st.balance}|${st.wallet?.address}|${st.eth}|${st.gasPrice}`;
     if (key === this.shopKey) return;
     this.shopKey = key;
     const hadFocus = this.shop.contains(document.activeElement);
@@ -361,18 +361,25 @@ export class Garage extends Panel {
   private shopRow(it: CatalogItem): HTMLElement {
     const st = chain.state;
     const p = st.purchases.get(it.id);
-    const busy = p && (p.status === 'signing' || p.status === 'sending' || p.status === 'pending');
+    const busy = p && (p.status === 'confirm' || p.status === 'pending');
     const balance = st.balance ?? 0n;
     const short = it.price - balance;
     const kind: CosmeticKind = it.kind;
     const label = kind === 'car' ? (CAR_STYLES.find((c) => c.id === it.key)?.name ?? it.name) : (PAINTS.find((x) => x.name.toLowerCase() === it.key)?.name.toUpperCase() ?? it.name);
 
     let btn: HTMLButtonElement;
-    if (!busy && chain.purchaseBusy) {
-      // one purchase at a time (each one signs the wallet's next nonce)
+    const lowGas = !!st.wallet && chain.needsGas(BUY_GAS);
+    if (!st.wallet) {
+      btn = h('button', { class: 'nb-btn nb-btn-primary nb-gar-buy', type: 'button', 'data-nav': '', title: 'Connect a wallet to own NFTs' }, h('span', { class: 'nb-btn-inner' }, icon('wallet', 'nb-btn-ico'), span('nb-btn-label', 'CONNECT WALLET')));
+      btn.addEventListener('click', () => {
+        this.ctx.sound('click');
+        this.ctx.open('wallet');
+      });
+    } else if (!busy && chain.purchaseBusy) {
+      // one purchase at a time
       btn = h('button', { class: 'nb-btn nb-btn-secondary nb-gar-buy is-busy', type: 'button', 'data-nav': '', title: 'Another purchase is in progress' }, h('span', { class: 'nb-btn-inner' }, span('nb-btn-label', 'WAIT')));
     } else if (busy) {
-      const text = p!.status === 'signing' ? (st.wallet?.kind === 'external' ? 'CONFIRM IN WALLET' : 'SIGNING') : p!.status === 'sending' ? 'SENDING' : 'MINTING NFT';
+      const text = p!.status === 'confirm' ? 'CONFIRM IN WALLET' : 'MINTING NFT';
       btn = h('button', { class: 'nb-btn nb-btn-primary nb-gar-buy is-busy', type: 'button', 'data-nav': '' }, h('span', { class: 'nb-btn-inner' }, icon('spinner', 'nb-btn-ico nb-spin'), span('nb-btn-label', text)));
     } else if (short > 0n) {
       btn = h('button', { class: 'nb-btn nb-btn-secondary nb-gar-buy', type: 'button', 'data-nav': '', title: 'Play a match to earn NOVA' }, h('span', { class: 'nb-btn-inner' }, icon('play', 'nb-btn-ico'), span('nb-btn-label', 'EARN NOVA')));
@@ -380,19 +387,29 @@ export class Garage extends Panel {
         this.ctx.sound('click');
         this.ctx.open('setup');
       });
+    } else if (lowGas) {
+      btn = h('button', { class: 'nb-btn nb-btn-secondary nb-gar-buy', type: 'button', 'data-nav': '', title: 'Your wallet needs ETH for gas' }, h('span', { class: 'nb-btn-inner' }, icon('gas', 'nb-btn-ico'), span('nb-btn-label', 'GET GAS')));
+      btn.addEventListener('click', () => {
+        this.ctx.sound('click');
+        this.ctx.open('wallet');
+      });
     } else {
       btn = h('button', { class: 'nb-btn nb-btn-primary nb-gar-buy', type: 'button', 'data-nav': '' }, h('span', { class: 'nb-btn-inner' }, icon('nova', 'nb-btn-ico'), span('nb-btn-label', p?.status === 'error' ? 'TRY AGAIN' : 'BUY')));
       btn.addEventListener('click', () => this.buy(it));
     }
 
-    const status =
-      p?.status === 'error'
+    const est = gasEstimate(BUY_GAS);
+    const status = !st.wallet
+      ? span('nb-shop-msg', 'Connect a wallet to buy NFTs with NOVA')
+      : p?.status === 'error'
         ? span('nb-shop-msg is-err', p.message ?? 'Purchase failed')
         : busy
-          ? span('nb-shop-msg', p!.status === 'pending' ? 'Minting your NFT on-chain…' : p!.status === 'sending' ? 'Relayer is submitting · gas sponsored' : 'Authorizing the purchase…')
+          ? span('nb-shop-msg', p!.status === 'pending' ? 'Minting your NFT on-chain…' : 'Confirm the purchase in your wallet')
           : short > 0n
             ? span('nb-shop-msg', `Need ${formatNova(short)} more NOVA — play a match`)
-            : span('nb-shop-msg is-ok', `Balance ${formatNova(balance)} NOVA · no gas needed`);
+            : lowGas
+              ? span('nb-shop-msg is-err', `No ${NETWORK_LABEL} ETH for gas`)
+              : span('nb-shop-msg is-ok', `Balance ${formatNova(balance)} NOVA · one transaction${est ? ` · ${est} gas` : ''}`);
 
     return h(
       'div',

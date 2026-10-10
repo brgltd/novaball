@@ -1,5 +1,5 @@
 /** Title screen over the live 3D attract match: wordmark, main menu, pilot card, NOVA rules card, input hints. */
-import { chain, NETWORK_LABEL, shortAddress } from '../../chain';
+import { chain, formatNova, NETWORK_LABEL, shortAddress } from '../../chain';
 import { CAR_STYLES, GAME_TAGLINE, PAINTS } from '../../theme';
 import { novaAmount } from '../chainui';
 import { Panel, type UIContext } from '../core';
@@ -90,7 +90,7 @@ export class MainMenu extends Panel {
           'button',
           { class: 'nb-wcard', type: 'button', 'data-nav': '', 'data-nav-group': 'side', 'aria-label': 'Open wallet' },
           h('span', { class: 'nb-wcard-ico' }, icon('nova')),
-          h('span', { class: 'nb-wcard-text' }, h('span', { class: 'nb-wcard-k' }, 'NOVA', span('nb-wcard-net', h('span', { class: 'nb-net-dot' }), NETWORK_LABEL)), this.walletBalance.el, this.walletSub),
+          h('span', { class: 'nb-wcard-text' }, h('span', { class: 'nb-wcard-k' }, 'NOVA', span('nb-wcard-net', h('span', { class: 'nb-net-dot' }), NETWORK_LABEL)), this.walletBalance.el, span('nb-wcard-cta', 'CONNECT WALLET'), this.walletSub),
           h('span', { class: 'nb-pilot-edit' }, icon('chevron')),
         )
       : null;
@@ -175,15 +175,22 @@ export class MainMenu extends Panel {
   private refreshWallet(): void {
     if (!this.walletCard) return;
     const st = chain.state;
-    this.walletBalance.set(st.balance);
-    const n = chain.affordable().length;
-    this.walletSub.textContent = !st.wallet
-      ? 'CONNECTING…'
-      : n > 0
-        ? `${n} UNLOCK${n === 1 ? '' : 'S'} AVAILABLE IN THE GARAGE`
-        : st.balance === 0n && !st.record?.matches
-          ? 'PLAY A MATCH TO EARN NOVA · NO GAS NEEDED'
-          : `${st.wallet.kind === 'guest' ? 'GUEST WALLET' : st.wallet.label.toUpperCase()} · ${shortAddress(st.wallet.address)}`;
+    this.walletBalance.set(st.wallet ? st.balance : null);
+    const n = st.wallet ? chain.affordable().length : 0;
+    const unclaimed = st.unclaimed ? chain.rewardFor(st.unclaimed.points) : 0n;
+    this.walletSub.textContent = st.restoring
+      ? 'CHECKING WALLET…'
+      : unclaimed > 0n
+        ? `+${formatNova(unclaimed)} NOVA TO CLAIM`
+        : !st.wallet
+          ? 'CLAIM NOVA · OWN NFTS'
+          : n > 0
+            ? `${n} UNLOCK${n === 1 ? '' : 'S'} AVAILABLE IN THE GARAGE`
+            : st.balance === 0n && !st.record?.matches
+              ? 'PLAY A MATCH, THEN CLAIM YOUR NOVA'
+              : `${st.wallet.label.toUpperCase()} · ${shortAddress(st.wallet.address)}`;
+    this.walletCard.classList.toggle('has-claim', unclaimed > 0n);
+    this.walletCard.classList.toggle('no-wallet', !st.wallet);
     this.walletCard.classList.toggle('has-unlocks', n > 0);
     this.walletCard.classList.toggle('is-offline', st.status === 'error');
   }

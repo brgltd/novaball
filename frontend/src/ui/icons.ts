@@ -112,8 +112,10 @@ export const ICONS = {
   external: S(`<path d="M13.5 4.5h6v6M19.5 4.5 11 13"/><path d="M17.5 14v4.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1H10"/>`),
   /** Two sheets (copy). */
   copy: S(`<rect x="8.5" y="8.5" width="11" height="11" rx="2" fill="currentColor" fill-opacity=".16"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>`),
-  /** Key (export the guest wallet). */
-  key: S(`<circle cx="8" cy="15.5" r="4" fill="currentColor" fill-opacity=".16"/><path d="m10.9 12.6 8.6-8.6M16.5 7l2.5 2.5M14.2 9.3l2 2"/>`),
+  /** Fuel pump (gas money). */
+  gas: S(`<path d="M4.5 20.5V5.5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v15" fill="currentColor" fill-opacity=".16"/><path d="M3 20.5h13M7 7.5h5M14.5 10.5h1.5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 0 3 0V8.5l-2.5-2.5"/>`),
+  /** Unplug (disconnect). */
+  unplug: S(`<path d="m6.5 17.5-3 3M17.5 6.5l3-3"/><path d="m9 10 5 5-2.2 2.2a3.5 3.5 0 0 1-5-5zM15 14l-5-5 2.2-2.2a3.5 3.5 0 0 1 5 5z" fill="currentColor" fill-opacity=".16"/>`),
   /** Chain links (on-chain). */
   chain: S(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1.2-1.2"/>`),
   /** Arc spinner (rotate with CSS). */

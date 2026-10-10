@@ -1,69 +1,48 @@
 /**
- * Wallets: a zero-friction GUEST wallet (a key generated in this browser — no extension, no popups, no gas: the
- * relayer pays) or the player's own EXTERNAL wallet (MetaMask, Rabby, Coinbase... via EIP-6963 discovery).
- * Either way the game only ever asks for EIP-712 signatures; transactions are sponsored.
+ * The player's own browser wallet (MetaMask, Brave Wallet, Phantom, Rabby, Coinbase...), discovered via EIP-6963
+ * with a `window.ethereum` fallback. The player sends their own transactions (reward claims, purchases) and pays
+ * the gas in ETH on the game's chain.
  */
-import {
-  createWalletClient,
-  custom,
-  http,
-  numberToHex,
-  type EIP1193Provider,
-  type TypedDataDefinition,
-  type WalletClient,
-} from 'viem';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { createWalletClient, custom, numberToHex, type EIP1193Provider, type WalletClient } from 'viem';
 
-import { REPORT_DOMAIN, REPORT_TYPES, SESSION_TYPES, type Address, type Hex, type SessionGrant } from './api';
-import { CHAIN, CHAIN_ID, EXPLORER, RPC_URL, WALLET_RPC_URL } from './config';
-
-export type WalletKind = 'guest' | 'external';
+import type { Address } from './types';
+import { CHAIN, CHAIN_ID, EXPLORER, NETWORK_LABEL, WALLET_RPC_URL } from './config';
 
 export interface NovaWallet {
-  readonly kind: WalletKind;
   readonly address: Address;
-  /** 'GUEST WALLET' or the extension's name. */
+  /** The extension's name ("MetaMask"). */
   readonly label: string;
-  /** Extension icon (data URI), external wallets only. */
+  /** Extension icon (data URI), when it announced one. */
   readonly icon?: string;
+  readonly option: WalletOption;
   readonly client: WalletClient;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  signTypedData(def: TypedDataDefinition<any, any>): Promise<Hex>;
-  /** External wallets: make sure the wallet is on our chain (prompts a switch / add). */
+  /** Make sure the wallet is on the game's chain (prompts a switch, or adding the network). */
   ensureChain(): Promise<void>;
-  /** Sign a match report (guest: directly; external: with a session key, granted once by the wallet). */
-  signReport(m: ReportMessage): Promise<{ signature: Hex; session?: SessionGrant }>;
-  /** External wallets: make sure a reward session is granted (one signature prompt, valid 30 days). */
-  ensureSession(): Promise<void>;
 }
-
-export interface ReportMessage {
-  player: Address;
-  seed: bigint;
-  stateHash: bigint;
-  points: bigint;
-}
-
-const REPORT = { domain: { ...REPORT_DOMAIN, chainId: CHAIN_ID }, types: REPORT_TYPES, primaryType: 'MatchReport' } as const;
-const SESSION_TTL_S = 30 * 86400;
 
 export interface WalletOption {
+  /** EIP-6963 rdns (`io.metamask`) or 'injected'. */
   id: string;
   name: string;
   icon?: string;
   provider: EIP1193Provider;
 }
 
-const GUEST_KEY = 'novaball.guestWallet.v1';
-const SESSION_KEY = 'novaball.rewardSession.v1';
-const MODE_KEY = 'novaball.walletMode.v1';
+/** Wallets we point players to when none is installed. */
+export const SUGGESTED_WALLETS: ReadonlyArray<{ name: string; url: string }> = [
+  { name: 'MetaMask', url: 'https://metamask.io/download/' },
+  { name: 'Brave Wallet', url: 'https://brave.com/wallet/' },
+  { name: 'Phantom', url: 'https://phantom.com/download' },
+];
+
+const MODE_KEY = 'novaball.wallet.v2';
 
 function store(key: string, value: string | null): void {
   try {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    /* storage blocked: the wallet lives for this session only */
+    /* storage blocked: reconnect next visit */
   }
 }
 
@@ -75,41 +54,7 @@ function read(key: string): string | null {
   }
 }
 
-// ------------------------------------------------------------------ guest
-
-let sessionGuestKey: Hex | null = null;
-
-function guestKey(): Hex {
-  const saved = read(GUEST_KEY);
-  if (saved && /^0x[0-9a-fA-F]{64}$/.test(saved)) return saved as Hex;
-  if (!sessionGuestKey) {
-    sessionGuestKey = generatePrivateKey();
-    store(GUEST_KEY, sessionGuestKey);
-  }
-  return sessionGuestKey;
-}
-
-export function guestWallet(): NovaWallet {
-  const account = privateKeyToAccount(guestKey());
-  const client = createWalletClient({ account, chain: CHAIN, transport: http(RPC_URL) });
-  return {
-    kind: 'guest',
-    address: account.address,
-    label: 'GUEST WALLET',
-    client,
-    signTypedData: (def) => account.signTypedData(def),
-    ensureChain: async () => {},
-    signReport: async (message) => ({ signature: await account.signTypedData({ ...REPORT, message }) }),
-    ensureSession: async () => {},
-  };
-}
-
-/** The guest wallet's private key (to import it into a real wallet). */
-export function exportGuestKey(): Hex {
-  return guestKey();
-}
-
-// ------------------------------------------------------------------ external (EIP-6963 + window.ethereum)
+// ------------------------------------------------------------------ discovery (EIP-6963 + window.ethereum)
 
 interface Eip6963Detail {
   info: { uuid: string; name: string; icon: string; rdns: string };
@@ -133,27 +78,42 @@ function startDiscovery(): void {
 export function walletOptions(): WalletOption[] {
   startDiscovery();
   const list = [...discovered.values()];
-  const legacy = (window as unknown as { ethereum?: EIP1193Provider & { isMetaMask?: boolean } }).ethereum;
-  if (!list.length && legacy) list.push({ id: 'injected', name: legacy.isMetaMask ? 'MetaMask' : 'Browser wallet', provider: legacy });
+  const legacy = (window as unknown as { ethereum?: EIP1193Provider & { isMetaMask?: boolean; isBraveWallet?: boolean; isPhantom?: boolean } }).ethereum;
+  if (!list.length && legacy) {
+    const name = legacy.isBraveWallet ? 'Brave Wallet' : legacy.isPhantom ? 'Phantom' : legacy.isMetaMask ? 'MetaMask' : 'Browser wallet';
+    list.push({ id: 'injected', name, provider: legacy });
+  }
   return list;
 }
 
 startDiscovery();
+
+// ------------------------------------------------------------------ chain
 
 interface ProviderError {
   code?: number;
   message?: string;
 }
 
-async function ensureProviderChain(provider: EIP1193Provider): Promise<void> {
+function errorCode(err: unknown): number | undefined {
+  return (err as ProviderError).code ?? (err as { data?: { originalError?: ProviderError } }).data?.originalError?.code;
+}
+
+/** Switch the wallet to the game's chain, adding the network first if the wallet doesn't know it. */
+async function ensureProviderChain(opt: WalletOption): Promise<void> {
+  const provider = opt.provider;
   const current = Number(await provider.request({ method: 'eth_chainId' }));
   if (current === CHAIN_ID) return;
   const chainId = numberToHex(CHAIN_ID);
   try {
     await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId }] });
+    return;
   } catch (err) {
-    const code = (err as ProviderError).code ?? (err as { data?: { originalError?: ProviderError } }).data?.originalError?.code;
-    if (code !== 4902 && !/unrecognized|not added|unknown chain/i.test((err as ProviderError).message ?? '')) throw err;
+    if (errorCode(err) === 4001) throw err; // the player said no
+    const unknown = errorCode(err) === 4902 || /unrecognized|not added|unknown chain|not supported/i.test((err as ProviderError).message ?? '');
+    if (!unknown) throw chainError(opt, err);
+  }
+  try {
     await provider.request({
       method: 'wallet_addEthereumChain',
       params: [
@@ -166,108 +126,75 @@ async function ensureProviderChain(provider: EIP1193Provider): Promise<void> {
         },
       ],
     });
+  } catch (err) {
+    if (errorCode(err) === 4001) throw err;
+    throw chainError(opt, err);
+  }
+  // some wallets add the network without switching to it
+  if (Number(await provider.request({ method: 'eth_chainId' })) !== CHAIN_ID) {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId }] }).catch((err) => {
+      throw chainError(opt, err);
+    });
   }
 }
 
-interface StoredSession {
-  pk: Hex;
-  key: Address;
-  expires: number;
-  signature: Hex;
+function chainError(opt: WalletOption, cause: unknown): Error {
+  console.warn('[wallet] chain switch failed', cause);
+  return new Error(`${opt.name} couldn't switch to ${NETWORK_LABEL}. Add the network in your wallet, or try MetaMask or Brave Wallet.`);
 }
 
-function externalWallet(opt: WalletOption, address: Address): NovaWallet {
-  const client = createWalletClient({ account: address, chain: CHAIN, transport: custom(opt.provider) });
-  const ensureChain = () => ensureProviderChain(opt.provider);
-  const storeKey = `${SESSION_KEY}:${CHAIN_ID}:${address.toLowerCase()}`;
-  const loadSession = (): StoredSession | null => {
-    try {
-      const s = JSON.parse(read(storeKey) ?? 'null') as StoredSession | null;
-      return s && s.expires - 86400 > Date.now() / 1000 ? s : null;
-    } catch {
-      return null;
-    }
-  };
-  const ensureSession = async (): Promise<StoredSession> => {
-    const cur = loadSession();
-    if (cur) return cur;
-    const pk = generatePrivateKey();
-    const key = privateKeyToAccount(pk).address;
-    const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_S;
-    await ensureChain();
-    const signature = await client.signTypedData({
-      account: address,
-      domain: { ...REPORT_DOMAIN, chainId: CHAIN_ID },
-      types: SESSION_TYPES,
-      primaryType: 'Session',
-      message: { player: address, sessionKey: key, expires: BigInt(expires) },
-    });
-    const s: StoredSession = { pk, key, expires, signature };
-    store(storeKey, JSON.stringify(s));
-    return s;
-  };
+// ------------------------------------------------------------------ connect / restore
+
+function makeWallet(opt: WalletOption, address: Address): NovaWallet {
   return {
-    kind: 'external',
     address,
     label: opt.name,
     icon: opt.icon,
-    client,
-    ensureChain,
-    signTypedData: async (def) => {
-      await ensureChain();
-      return client.signTypedData({ account: address, ...def });
-    },
-    ensureSession: async () => void (await ensureSession()),
-    signReport: async (message) => {
-      const s = await ensureSession();
-      const signature = await privateKeyToAccount(s.pk).signTypedData({ ...REPORT, message });
-      return { signature, session: { key: s.key, expires: s.expires, signature: s.signature } };
-    },
+    option: opt,
+    client: createWalletClient({ account: address, chain: CHAIN, transport: custom(opt.provider) }),
+    ensureChain: () => ensureProviderChain(opt),
   };
 }
 
-/** Prompt the wallet to connect (user gesture). */
-export async function connectExternal(opt: WalletOption): Promise<NovaWallet> {
+/** Ask the wallet to connect (needs a user gesture), then to switch to the game's chain. */
+export async function connectWallet(opt: WalletOption): Promise<NovaWallet> {
   const accounts = (await opt.provider.request({ method: 'eth_requestAccounts' })) as Address[];
   if (!accounts?.length) throw new Error('No account was shared');
-  await ensureProviderChain(opt.provider).catch(() => undefined);
-  store(MODE_KEY, `external:${opt.id}`);
-  return externalWallet(opt, accounts[0]);
+  store(MODE_KEY, opt.id);
+  const w = makeWallet(opt, accounts[0]);
+  // switching networks right away keeps balances in the wallet's UI consistent; a refusal is fine until a transaction
+  await w.ensureChain().catch((err) => console.warn('[wallet] not switched yet', err));
+  return w;
 }
 
-/** The wallet used last time, without any prompt (an external wallet only if it is still connected). */
-export async function restoreWallet(): Promise<NovaWallet> {
-  const mode = read(MODE_KEY);
-  if (mode?.startsWith('external:')) {
-    const id = mode.slice('external:'.length);
-    // EIP-6963 announcements are synchronous to the request event, but give slow extensions a beat
-    for (let i = 0; i < 3 && !walletOptions().some((o) => o.id === id); i++) await new Promise((r) => setTimeout(r, 150));
-    const opt = walletOptions().find((o) => o.id === id);
-    if (opt) {
-      try {
-        const accounts = (await opt.provider.request({ method: 'eth_accounts' })) as Address[];
-        if (accounts?.length) return externalWallet(opt, accounts[0]);
-      } catch {
-        /* fall back to the guest wallet */
-      }
-    }
+/** The wallet connected last time, without any prompt (if it still shares an account with the game). */
+export async function restoreWallet(): Promise<NovaWallet | null> {
+  const id = read(MODE_KEY);
+  if (!id) return null;
+  // EIP-6963 announcements answer the request event synchronously, but give slow extensions a beat
+  for (let i = 0; i < 3 && !walletOptions().some((o) => o.id === id); i++) await new Promise((r) => setTimeout(r, 150));
+  const opt = walletOptions().find((o) => o.id === id);
+  if (!opt) return null;
+  try {
+    const accounts = (await opt.provider.request({ method: 'eth_accounts' })) as Address[];
+    return accounts?.length ? makeWallet(opt, accounts[0]) : null;
+  } catch {
+    return null;
   }
-  return guestWallet();
 }
 
-export function rememberGuest(): void {
-  store(MODE_KEY, 'guest');
+/** Forget the connection (and, where supported, revoke the site's permission in the wallet). */
+export async function disconnectWallet(w: NovaWallet | null): Promise<void> {
+  store(MODE_KEY, null);
+  if (!w) return;
+  await w.option.provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] } as never).catch(() => undefined);
 }
 
-/** Subscribe to an external wallet's account switches / disconnects. */
-export function watchExternal(opt: WalletOption | undefined, onAccounts: (a: Address[]) => void): () => void {
-  const p = opt?.provider;
+/** Subscribe to the wallet's account switches / disconnects. */
+export function watchWallet(w: NovaWallet, onAccounts: (a: Address[]) => void): () => void {
+  const p = w.option.provider;
   if (!p?.on) return () => {};
   const fn = (a: unknown) => onAccounts((a as Address[]) ?? []);
   p.on('accountsChanged', fn as never);
   return () => p.removeListener?.('accountsChanged', fn as never);
-}
-
-export function optionFor(wallet: NovaWallet): WalletOption | undefined {
-  return wallet.kind === 'external' ? walletOptions().find((o) => o.name === wallet.label) : undefined;
 }

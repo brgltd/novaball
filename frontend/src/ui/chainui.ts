@@ -1,7 +1,8 @@
-/** Small UI pieces shared by the on-chain screens (wallet card, wallet panel, garage shop, end-screen reward). */
-import { chain, formatNova, hexColor, type CatalogItem } from '../chain';
+/** Small UI pieces shared by the on-chain screens (wallet card, wallet panel, garage shop, end-screen claim). */
+import { chain, formatEth, formatNova, GAS_SOURCES, hexColor, IS_LOCAL, SUGGESTED_WALLETS, walletOptions, type CatalogItem, type WalletOption } from '../chain';
 import { CAR_STYLES, PAINTS } from '../theme';
 import type { CarStyleId } from '../sim/types';
+import type { UIContext } from './core';
 import { h, setText, span, textNode } from './dom';
 import { carSvg } from './icons';
 import { icon } from './widgets';
@@ -89,4 +90,67 @@ export function ownedSetup(style: CarStyleId, paint: string): { style: CarStyleI
     style: chain.unlocked('car', style) ? style : 'striker',
     paint: key && chain.unlocked('paint', key) ? paint : STARTER_PAINT_HEX,
   };
+}
+
+// ------------------------------------------------------------------ wallets + gas
+
+/** A wallet's icon (its own when announced, a generic one otherwise). */
+export function walletIcon(src: string | undefined, cls = 'nb-wopt-ico'): HTMLElement {
+  return src ? h('img', { class: cls, src, alt: '' }) : icon('wallet', cls);
+}
+
+/**
+ * The player's way in: one button per installed wallet (MetaMask, Brave, Phantom...), or install links when there
+ * is none. `onPick` runs after a successful connection.
+ */
+export function walletChoices(ctx: UIContext, onPick: (opt: WalletOption) => void, cls = ''): HTMLElement {
+  const opts = walletOptions();
+  const box = h('div', { class: `nb-wopts ${cls}` });
+  if (opts.length) {
+    for (const o of opts.slice(0, 4)) {
+      const b = h('button', { class: 'nb-wopt', type: 'button', 'data-nav': '' }, walletIcon(o.icon), span('nb-wopt-name', o.name.toUpperCase()), icon('chevron', 'nb-wopt-go'));
+      b.addEventListener('click', () => {
+        ctx.sound('click');
+        onPick(o);
+      });
+      box.append(b);
+    }
+    return box;
+  }
+  box.append(span('nb-wopts-none', 'No browser wallet found. Install one, then reload:'));
+  for (const s of SUGGESTED_WALLETS) {
+    const b = h('button', { class: 'nb-wopt is-install', type: 'button', 'data-nav': '' }, icon('wallet', 'nb-wopt-ico'), span('nb-wopt-name', s.name.toUpperCase()), icon('external', 'nb-wopt-go'));
+    b.addEventListener('click', () => {
+      ctx.sound('click');
+      openUrl(s.url);
+    });
+    box.append(b);
+  }
+  return box;
+}
+
+/** Where to get gas ETH: faucet / bridge links, or a one-click top-up on the local chain. */
+export function gasLinks(ctx: UIContext, onFaucet?: () => void): HTMLElement[] {
+  if (IS_LOCAL) {
+    const b = h('button', { class: 'nb-link', type: 'button', 'data-nav': '' }, icon('gas'), 'GET 10 TEST ETH');
+    b.addEventListener('click', () => {
+      ctx.sound('click');
+      void chain.devFaucet().then(() => onFaucet?.());
+    });
+    return [b];
+  }
+  return GAS_SOURCES.map((g) => {
+    const b = h('button', { class: 'nb-link', type: 'button', 'data-nav': '' }, g.name.toUpperCase(), icon('external'));
+    b.addEventListener('click', () => {
+      ctx.sound('click');
+      openUrl(g.url);
+    });
+    return b;
+  });
+}
+
+/** "~0.000026 ETH" for a transaction of `gas` units (null when the gas price is unknown). */
+export function gasEstimate(gas: bigint): string | null {
+  const c = chain.gasCost(gas);
+  return c === null ? null : `~${formatEth(c)} ETH`;
 }

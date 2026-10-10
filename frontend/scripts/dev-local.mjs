@@ -2,9 +2,11 @@
 // One command for the whole local stack:  npm run dev:local
 //   1. starts anvil on :8545 (unless one is already running), persisting its state in contracts/.anvil/
 //   2. deploys the contracts if they are not on that chain yet (contracts/script/Deploy.s.sol)
-//   3. starts the Vite dev server — the game + the relayer at /api + an /rpc proxy to anvil
+//   3. starts the Vite dev server — the game + an /rpc proxy to anvil
 //   --fresh   start from an empty chain and redeploy (after changing the contracts)
 // Needs Foundry (https://getfoundry.sh). Ctrl+C stops everything.
+// Your browser wallet: add the network (the game offers it: chain 31337, RPC http://127.0.0.1:8545), then use the
+// wallet panel's GET 10 TEST ETH for gas. After a --fresh restart, reset the wallet's activity/nonce for that network.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -87,11 +89,11 @@ if (deployed) {
     stopAll();
     process.exit(1);
   }
-  for (const line of r.stdout.split('\n')) if (/^\s+(NOVA|Garage|Arena|relayer)\s/.test(line)) log(line.trim());
+  for (const line of r.stdout.split('\n')) if (/^\s+(NOVA|Garage|Arena)\s/.test(line)) log(line.trim());
 }
 
-// ---------------------------------------------------------------- 3. game + relayer
-log('starting the game (Vite) — the relayer is served at /api, anvil at /rpc');
+// ---------------------------------------------------------------- 3. game
+log('starting the game (Vite) — anvil is proxied at /rpc');
 const vite = spawn(process.execPath, [`${frontend}node_modules/vite/bin/vite.js`, ...viteArgs], {
   cwd: frontend,
   stdio: 'inherit',

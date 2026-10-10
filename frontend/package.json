@@ -12,7 +12,6 @@
     "dev:local": "node scripts/dev-local.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning server/node.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "shot": "node scripts/shot.mjs",

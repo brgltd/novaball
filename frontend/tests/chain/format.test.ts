@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatNova, hexColor, shortAddress } from '../../src/chain/format';
+import { formatEth, formatNova, hexColor, shortAddress } from '../../src/chain/format';
 
 const NOVA = 10n ** 18n;
 
@@ -19,6 +19,18 @@ describe('formatNova', () => {
   it('handles missing values', () => {
     expect(formatNova(null)).toBe('—');
     expect(formatNova(undefined)).toBe('—');
+  });
+});
+
+describe('formatEth', () => {
+  it('keeps gas-sized amounts readable', () => {
+    expect(formatEth(0n)).toBe('0');
+    expect(formatEth(5n * 10n ** 16n)).toBe('0.05');
+    expect(formatEth(1234n * 10n ** 15n)).toBe('1.234');
+    expect(formatEth(26_000_000_000_000n)).toBe('0.000026');
+    expect(formatEth(3_000_000_000_000_000n)).toBe('0.003');
+    expect(formatEth(1000n)).toBe('<0.000001');
+    expect(formatEth(null)).toBe('—');
   });
 });
 

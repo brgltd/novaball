@@ -6,8 +6,8 @@ import { Panel, type UIContext } from '../core';
 import { div, formatClock, h, play, scoreText, span } from '../dom';
 import { ScoreTable } from '../hud/ScoreTable';
 import { button, gp, hint, icon, kbd } from '../widgets';
-import { chain, formatNova, NETWORK_LABEL, txUrl, type RewardState } from '../../chain';
-import { openUrl } from '../chainui';
+import { chain, CLAIM_GAS, formatEth, formatNova, friendly, NETWORK_LABEL, txUrl, walletOptions, type ChainState, type WalletOption } from '../../chain';
+import { gasEstimate, gasLinks, openUrl, walletChoices } from '../chainui';
 
 const DIFF_NAME: Record<string, string> = { rookie: 'ROOKIE', pro: 'PRO', legend: 'LEGEND' };
 const NEXT_DIFF: Partial<Record<Difficulty, Difficulty>> = { rookie: 'pro', pro: 'legend' };
@@ -31,11 +31,19 @@ export class EndScreen extends Panel {
   private readonly info: HTMLElement;
   private readonly rematch: HTMLButtonElement;
   private readonly menu: HTMLButtonElement;
-  /** NOVA EARNED card: the match reward as it lands on-chain. */
-  private readonly reward: HTMLButtonElement;
+  /** CLAIM card: the match's NOVA reward, claimed by the player's wallet. */
+  private readonly reward: HTMLElement;
   private readonly rewardAmt: Text;
   private readonly rewardSub: HTMLElement;
   private readonly rewardCta: HTMLElement;
+  /** Above the card: what claiming costs (gas) and where to get ETH. */
+  private readonly rewardNote: HTMLElement;
+  /** Above the card: the wallet chooser. */
+  private readonly rewardPop: HTMLElement;
+  private popOpen = false;
+  /** Why the last connect attempt failed (shown until the next one). */
+  private connectErr: string | null = null;
+  private readonly sig = new Map<string, string>();
   private rewardShown = false;
   private unsub: (() => void) | null = null;
   private tick = 0;
@@ -57,18 +65,17 @@ export class EndScreen extends Panel {
     this.rewardAmt = document.createTextNode('0');
     this.rewardSub = span('nb-reward-sub');
     this.rewardCta = span('nb-reward-cta');
+    this.rewardNote = div('nb-reward-note');
+    this.rewardPop = div('nb-reward-pop');
     this.reward = h(
-      'button',
-      { class: 'nb-reward', type: 'button', 'data-nav': '', 'aria-label': 'NOVA earned' },
+      'div',
+      { class: 'nb-reward', 'aria-label': 'Match reward' },
       h('span', { class: 'nb-reward-coin' }, icon('nova')),
       h('span', { class: 'nb-reward-main' }, h('span', { class: 'nb-reward-amt' }, span('nb-reward-plus', '+'), span('nb-reward-v', this.rewardAmt), span('nb-reward-u', 'NOVA')), this.rewardSub),
       this.rewardCta,
+      this.rewardNote,
+      this.rewardPop,
     );
-    this.reward.addEventListener('click', () => {
-      ctx.sound('click');
-      const r = chain.state.reward;
-      ctx.open(r?.status === 'confirmed' && chain.affordable().length ? 'garage' : 'wallet');
-    });
     this.el = h(
       'div',
       { class: 'nb-screen nb-end nb-layer' },
@@ -160,6 +167,9 @@ export class EndScreen extends Panel {
     this.rewardShown = chain.state.enabled && !c.freePlay && sum.players.some((p) => p.isPlayer);
     this.el.classList.toggle('has-reward', this.rewardShown);
     this.countFrom = 0n;
+    this.popOpen = false;
+    this.connectErr = null;
+    this.sig.clear();
     this.renderReward();
     this.info.replaceChildren(span('nb-end-info-k', c.freePlay ? 'FREE PLAY' : `${c.teamSize}V${c.teamSize} · ${DIFF_NAME[c.difficulty] ?? c.difficulty} BOTS · ${formatClock(c.durationSec)}`), proof);
   }
@@ -234,50 +244,162 @@ export class EndScreen extends Panel {
     cancelAnimationFrame(this.countRaf);
   }
 
-  // ------------------------------------------------------------------ NOVA EARNED
+  // ------------------------------------------------------------------ CLAIM REWARDS
 
   private renderReward(): void {
     if (!this.rewardShown) return;
-    const r = chain.state.reward;
-    const status = r?.status ?? 'sending';
-    this.reward.className = `nb-reward is-${status}`;
-    this.countTo(r?.amount ?? 0n);
-    const rate = formatNova(chain.state.rewardPerPoint, 2);
-    const pts = !r ? '' : r.points === 0 ? 'NO POINTS — EVERY TOUCH EARNS NOVA' : `${r.points} PTS`;
-    this.reward.title = `${rate} NOVA per match point`;
-    this.rewardSub.replaceChildren(pts ? span('nb-reward-pts', pts) : '', span('nb-reward-status', this.statusText(r)));
-    const can = status === 'confirmed' && chain.affordable().length > 0;
-    this.rewardCta.replaceChildren(
-      status === 'sending' || status === 'pending' || status === 'cooldown' ? icon('spinner', 'nb-spin') : can ? span('nb-reward-cta-l', 'UNLOCK') : icon(status === 'confirmed' ? 'wallet' : 'info'),
-      can ? icon('chevron') : '',
-    );
-    this.reward.classList.toggle('can-spend', can);
+    const st = chain.state;
+    const c = st.claim;
+    const status = c?.status ?? 'ready';
+    const cooling = status === 'failed' && c?.reason === 'cooldown' && (c.retryAt ?? 0) > Date.now() / 1000;
+    const zero = c?.points === 0;
+    this.reward.className = `nb-reward is-${status}${c?.reason ? ` why-${c.reason}` : ''}${st.wallet ? '' : ' no-wallet'}${zero ? ' is-zero' : ''}`;
+    this.countTo(c ? chain.rewardFor(c.points) : 0n);
+    this.reward.title = `${formatNova(st.rewardPerPoint, 2)} NOVA per match point`;
+    const pts = !c ? '' : zero ? 'NO POINTS — EVERY TOUCH EARNS NOVA' : `${c.points} PTS`;
+    this.rewardSub.replaceChildren(pts ? span('nb-reward-pts', pts) : '', zero ? '' : span('nb-reward-status', this.statusText(st, cooling)));
+    this.renderCta(st, cooling, zero);
+    this.renderNote(st, zero);
+    this.renderPop(st);
     // the verifiable-match badge links to the on-chain record once it's in
-    if (status === 'confirmed' && r?.hash) {
-      this.verifyHash = r.hash;
+    if (status === 'confirmed' && c?.hash) {
+      this.verifyHash = c.hash;
       if (this.verifyK) this.verifyK.textContent = 'RECORDED ON-CHAIN';
       this.info.querySelector('.nb-verify')?.classList.add('is-onchain');
     }
     window.clearInterval(this.tick);
-    if (status === 'cooldown') this.tick = window.setInterval(() => this.renderReward(), 1000);
+    if (cooling) this.tick = window.setInterval(() => this.renderReward(), 1000);
   }
 
-  private statusText(r: RewardState | null): string {
-    switch (r?.status) {
+  private statusText(st: Readonly<ChainState>, cooling: boolean): string {
+    const c = st.claim;
+    const wallet = st.wallet?.label.toUpperCase() ?? 'WALLET';
+    switch (c?.status) {
       case undefined:
-      case 'sending':
-        return `RECORDING ON ${NETWORK_LABEL}…`;
+      case 'ready':
+        return st.wallet ? 'READY TO CLAIM' : this.connectErr ? this.connectErr.toUpperCase() : 'UNCLAIMED';
+      case 'confirm':
+        return `CONFIRM IN ${wallet}…`;
       case 'pending':
         return `MINTING ON ${NETWORK_LABEL}…`;
       case 'confirmed':
-        return `MINTED · BALANCE ${formatNova(chain.state.balance)}`;
-      case 'cooldown':
-        return `QUEUED · ARRIVES IN ${Math.max(0, Math.ceil((r.retryAt ?? 0) - Date.now() / 1000))}S`;
-      case 'offline':
-        return 'REWARDS OFFLINE · RELAYER UNREACHABLE';
+        return `CLAIMED · BALANCE ${formatNova(st.balance)}`;
       case 'failed':
-        return (r.message ?? 'REWARD FAILED').toUpperCase();
+        if (c.reason === 'cooldown') return cooling ? `NEXT CLAIM IN ${Math.max(0, Math.ceil((c.retryAt ?? 0) - Date.now() / 1000))}S` : 'READY TO CLAIM';
+        if (c.reason === 'gas') return 'NO ETH FOR GAS';
+        if (c.reason === 'declined') return 'DECLINED IN WALLET';
+        return (c.message ?? 'CLAIM FAILED').toUpperCase();
     }
+  }
+
+  /** The card's button: CONNECT & CLAIM → CLAIM REWARDS → (wallet) → MINTING → UNLOCK. Rebuilt only on change. */
+  private renderCta(st: Readonly<ChainState>, cooling: boolean, zero: boolean): void {
+    const c = st.claim;
+    const status = c?.status ?? 'ready';
+    const can = status === 'confirmed' && chain.affordable().length > 0;
+    const left = cooling ? Math.max(0, Math.ceil((c!.retryAt ?? 0) - Date.now() / 1000)) : 0;
+    const key = `${status}:${c?.reason}:${!!st.wallet}:${st.connecting}:${st.restoring}:${can}:${left}:${zero}:${this.popOpen}`;
+    if (this.sig.get('cta') === key) return;
+    this.sig.set('cta', key);
+    const keep = this.rewardCta.contains(document.activeElement);
+    const btn = (label: string, ico: 'nova' | 'wallet' | 'spinner' | 'replay' | 'chevron' | 'clock', variant: 'primary' | 'secondary', fn: (() => void) | null) => {
+      const b = h(
+        'button',
+        { class: `nb-btn nb-btn-${variant} nb-reward-btn${fn ? '' : ' is-busy'}`, type: 'button', 'data-nav': '' },
+        h('span', { class: 'nb-btn-inner' }, icon(ico, `nb-btn-ico${ico === 'spinner' ? ' nb-spin' : ''}`), span('nb-btn-label', label)),
+      );
+      if (fn)
+        b.addEventListener('click', () => {
+          this.ctx.sound('click');
+          fn();
+        });
+      return b;
+    };
+    let el: HTMLElement | null;
+    if (zero) el = null;
+    else if (status === 'confirmed') el = can ? btn('UNLOCK', 'chevron', 'primary', () => this.ctx.open('garage')) : btn('WALLET', 'wallet', 'secondary', () => this.ctx.open('wallet'));
+    else if (status === 'confirm') el = btn('CONFIRM IN WALLET', 'spinner', 'primary', null);
+    else if (status === 'pending') el = btn('MINTING…', 'spinner', 'primary', null);
+    else if (!st.wallet) {
+      if (st.restoring) el = btn('CHECKING…', 'spinner', 'secondary', null);
+      else if (st.connecting) el = btn('CONNECTING…', 'spinner', 'primary', null);
+      else el = btn(this.popOpen ? 'CHOOSE A WALLET' : 'CONNECT & CLAIM', 'wallet', 'primary', () => this.connectAndClaim());
+    } else if (cooling) el = btn(`WAIT ${left}S`, 'clock', 'secondary', null);
+    else {
+      const retry = status === 'failed' && (c?.reason === 'declined' || c?.reason === 'error' || c?.reason === 'network');
+      el = btn(retry ? 'TRY AGAIN' : 'CLAIM REWARDS', retry ? 'replay' : 'nova', 'primary', () => this.claim());
+    }
+    this.rewardCta.replaceChildren(...(el ? [el] : []));
+    if (keep) this.ctx.focus((this.rewardCta.querySelector('[data-nav]') as HTMLElement | null) ?? this.defaultFocus());
+  }
+
+  /** What a claim costs and where the gas comes from — the player's own ETH on the game's chain. */
+  private renderNote(st: Readonly<ChainState>, zero: boolean): void {
+    const c = st.claim;
+    const status = c?.status ?? 'ready';
+    const low = !!st.wallet && (chain.needsGas(CLAIM_GAS) || (status === 'failed' && c?.reason === 'gas'));
+    const est = gasEstimate(CLAIM_GAS);
+    const key = `${status}:${c?.reason}:${st.wallet?.address}:${st.eth}:${low}:${est}:${zero}:${this.popOpen}`;
+    if (this.sig.get('note') === key) return;
+    this.sig.set('note', key);
+    const show = !zero && !this.popOpen && (status === 'ready' || status === 'failed' || (status === 'confirm' && low));
+    this.rewardNote.classList.toggle('is-on', show);
+    this.rewardNote.classList.toggle('is-warn', low);
+    if (!show) {
+      this.rewardNote.replaceChildren();
+      return;
+    }
+    const gas = `${est ? `${est} ` : ''}gas, paid in ${NETWORK_LABEL} ETH`;
+    const parts: Array<HTMLElement | string> = [icon('gas', 'nb-reward-note-ico')];
+    if (!st.wallet) parts.push(span('nb-reward-note-t', `Claiming mints NOVA to your own wallet: one transaction on ${NETWORK_LABEL} (${gas}, free from a faucet). Your reward waits here until your next match.`));
+    else if (low) parts.push(span('nb-reward-note-t', `Your wallet has ${formatEth(st.eth)} ETH on ${NETWORK_LABEL}. Claiming needs a little for gas${est ? ` (${est})` : ''} — get some free:`), ...gasLinks(this.ctx, () => this.renderReward()));
+    else parts.push(span('nb-reward-note-t', `One transaction on ${NETWORK_LABEL} · ${gas} · you have ${formatEth(st.eth)} ETH`));
+    this.rewardNote.replaceChildren(...parts);
+  }
+
+  private renderPop(st: Readonly<ChainState>): void {
+    const open = this.popOpen && !st.wallet;
+    const key = `${open}:${walletOptions().map((o) => o.id).join()}`;
+    if (this.sig.get('pop') === key) return;
+    this.sig.set('pop', key);
+    this.rewardPop.classList.toggle('is-on', open);
+    this.rewardPop.replaceChildren(...(open ? [span('nb-reward-pop-k', 'CONNECT A WALLET TO CLAIM'), walletChoices(this.ctx, (o) => void this.connectWith(o))] : []));
+    if (open) this.ctx.focus((this.rewardPop.querySelector('[data-nav]') as HTMLElement | null) ?? this.defaultFocus());
+  }
+
+  private connectAndClaim(): void {
+    const opts = walletOptions();
+    if (opts.length === 1 && !this.popOpen) {
+      void this.connectWith(opts[0]);
+      return;
+    }
+    this.popOpen = !this.popOpen;
+    this.renderReward();
+    if (!this.popOpen) this.ctx.focus((this.rewardCta.querySelector('[data-nav]') as HTMLElement | null) ?? this.defaultFocus());
+  }
+
+  private async connectWith(opt: WalletOption): Promise<void> {
+    this.popOpen = false;
+    this.connectErr = null;
+    try {
+      await chain.connect(opt);
+    } catch (err) {
+      this.ctx.sound('error');
+      this.connectErr = friendly(err);
+      this.renderReward();
+      return;
+    }
+    this.renderReward();
+    this.ctx.focus((this.rewardCta.querySelector('[data-nav]') as HTMLElement | null) ?? this.defaultFocus());
+    this.claim();
+  }
+
+  private claim(): void {
+    void chain.claimReward().then(() => {
+      const c = chain.state.claim;
+      if (c?.status === 'confirmed') this.ctx.sound('start');
+      else if (c?.status === 'failed' && c.reason !== 'cooldown') this.ctx.sound('error');
+    });
   }
 
   /** Count the amount up from what is shown (900 ms). */

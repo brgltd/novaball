@@ -1,10 +1,11 @@
-/** WALLET: NOVA balance, wallet identity (guest / external), career, NFT collection, on-chain activity, contracts. */
+/** WALLET: connect a browser wallet, NOVA balance, gas (ETH), unclaimed reward, career, NFTs, activity, contracts. */
 import {
   addressUrl,
   chain,
   CHAIN,
+  CLAIM_GAS,
   DEPLOYMENT,
-  exportGuestKey,
+  formatEth,
   formatNova,
   friendly,
   NETWORK_LABEL,
@@ -14,10 +15,11 @@ import {
   walletOptions,
   type Activity,
   type ChainState,
+  type WalletOption,
 } from '../../chain';
 import { Panel, type UIContext } from '../core';
 import { div, h, span } from '../dom';
-import { copyText, itemVisual, nftArt, novaAmount, openUrl, timeAgo } from '../chainui';
+import { copyText, gasEstimate, gasLinks, itemVisual, nftArt, novaAmount, openUrl, timeAgo, walletChoices, walletIcon } from '../chainui';
 import { button, gp, hint, icon, kbd, sectionTitle } from '../widgets';
 import { panelHeader } from './common';
 
@@ -30,6 +32,7 @@ export class WalletPanel extends Panel {
   private readonly gas: HTMLElement;
   private readonly actions: HTMLElement;
   private readonly flash: HTMLElement;
+  private readonly unclaimed: HTMLElement;
   private readonly collection: HTMLElement;
   private readonly activity: HTMLElement;
   private readonly contracts: HTMLElement;
@@ -39,7 +42,7 @@ export class WalletPanel extends Panel {
   private unsub: (() => void) | null = null;
   private rendered = -1;
   private busy = false;
-  /** Last rendered content key per list: lists are only rebuilt when they change (keeps focus while polling). */
+  /** Last rendered content key per section: sections are only rebuilt when they change (keeps focus while polling). */
   private readonly sig = new Map<string, string>();
 
   constructor(private readonly ctx: UIContext) {
@@ -55,6 +58,7 @@ export class WalletPanel extends Panel {
     this.gas = div('nb-wal-gas');
     this.actions = div('nb-wal-actions');
     this.flash = div('nb-wal-flash');
+    this.unclaimed = div('nb-wal-unclaimed');
     this.collection = div('nb-wal-collection');
     this.activity = div('nb-wal-activity');
     this.contracts = div('nb-wal-contracts');
@@ -74,9 +78,9 @@ export class WalletPanel extends Panel {
     const how = h(
       'div',
       { class: 'nb-wal-how' },
-      this.step('01', 'PLAY', 'Every match point mints NOVA to your wallet — the relayer records the match on-chain.', 'play'),
-      this.step('02', 'OWN', 'Spend NOVA on car bodies and paints. Each one is an ERC-1155 NFT; the NOVA is burned.', 'nova'),
-      this.step('03', 'DRIVE', 'Owned cosmetics unlock in the garage. Zero gas, zero popups with the guest wallet.', 'garage'),
+      this.step('01', 'PLAY', 'No wallet needed to play. Every match point is worth NOVA.', 'play'),
+      this.step('02', 'CLAIM', `After a match, claim your NOVA with one transaction. Your wallet pays a tiny gas fee in ${NETWORK_LABEL} ETH.`, 'nova'),
+      this.step('03', 'OWN', 'Spend NOVA on car bodies and paints: each one is an ERC-1155 NFT, and the NOVA is burned.', 'garage'),
     );
 
     this.el = h(
@@ -87,7 +91,7 @@ export class WalletPanel extends Panel {
       h(
         'div',
         { class: 'nb-panel-body nb-wallet-body' },
-        h('div', { class: 'nb-wal-main' }, hero, this.actions, this.flash, how),
+        h('div', { class: 'nb-wal-main' }, hero, this.actions, this.flash, this.unclaimed, how),
         h(
           'div',
           { class: 'nb-wal-side' },
@@ -102,14 +106,14 @@ export class WalletPanel extends Panel {
       h(
         'footer',
         { class: 'nb-panel-foot' },
-        span('nb-foot-note', 'Testnet demo · the guest wallet key is stored in this browser'),
+        span('nb-foot-note', `Testnet demo · gas is paid in ${NETWORK_LABEL} ETH (free from a faucet)`),
         h('div', { class: 'nb-hints' }, hint([kbd('ENTER', true)], [gp('A')], 'SELECT'), hint([kbd('ESC', true)], [gp('B')], 'BACK')),
       ),
     );
   }
 
   override defaultFocus(): HTMLElement | null {
-    return (this.actions.querySelector('[data-nav]') as HTMLElement | null) ?? this.copyBtn;
+    return (this.unclaimed.querySelector('[data-nav]') as HTMLElement | null) ?? (this.actions.querySelector('[data-nav]') as HTMLElement | null) ?? this.copyBtn;
   }
 
   override onShow(): void {
@@ -133,11 +137,13 @@ export class WalletPanel extends Panel {
     this.rendered = s.version;
     const w = s.wallet;
     this.el.classList.toggle('is-off', !s.enabled);
-    this.kind.replaceChildren(w?.icon ? h('img', { class: 'nb-wal-kind-ico', src: w.icon, alt: '' }) : icon(w?.kind === 'external' ? 'wallet' : 'pilot', 'nb-wal-kind-ico'), w?.label ?? 'NO WALLET');
-    this.addr.textContent = w ? shortAddress(w.address) : '—';
+    this.el.classList.toggle('no-wallet', !w);
+    this.kind.replaceChildren(w ? walletIcon(w.icon, 'nb-wal-kind-ico') : icon('wallet', 'nb-wal-kind-ico'), w ? w.label.toUpperCase() : s.restoring ? 'CHECKING WALLET…' : 'NO WALLET CONNECTED');
+    this.addr.textContent = w ? shortAddress(w.address) : '';
     this.addr.title = w?.address ?? '';
-    this.explorerBtn.style.display = addressUrl('0x0') ? '' : 'none';
-    this.balance.set(s.balance);
+    this.copyBtn.style.display = w ? '' : 'none';
+    this.explorerBtn.style.display = w && addressUrl('0x0') ? '' : 'none';
+    this.balance.set(w ? s.balance : null);
 
     const r = s.record;
     this.career.replaceChildren(
@@ -147,15 +153,9 @@ export class WalletPanel extends Panel {
       this.stat(r ? formatNova(r.earned) : '0', 'NOVA EARNED'),
     );
 
-    const relayer = s.relayer;
-    this.gas.className = `nb-wal-gas is-${relayer}`;
-    this.gas.replaceChildren(
-      span('nb-wal-gas-dot'),
-      relayer === 'offline' ? 'GAS RELAYER OFFLINE — rewards paused' : `GAS SPONSORED BY THE NOVABALL RELAYER${relayer === 'online' ? '' : ' · CONNECTING…'}`,
-    );
-    if (s.status === 'error') this.gas.append(span('nb-wal-gas-err', ` · ${s.error ?? 'RPC unreachable'}`));
-
+    this.renderGas(s);
     this.renderActions(s);
+    this.renderUnclaimed(s);
     this.renderCollection(s);
     this.renderActivity(s.activity);
     this.renderContracts();
@@ -168,22 +168,68 @@ export class WalletPanel extends Panel {
     return true;
   }
 
+  /** Gas money: the wallet's ETH on the game's chain and where to get more. */
+  private renderGas(s: Readonly<ChainState>): void {
+    const low = !!s.wallet && chain.needsGas(CLAIM_GAS);
+    if (!this.changed('gas', `${s.wallet?.address}:${s.eth}:${s.gasPrice}:${low}:${s.status}`)) return;
+    const est = gasEstimate(CLAIM_GAS);
+    this.gas.className = `nb-wal-gas${low ? ' is-low' : ''}${s.status === 'error' ? ' is-err' : ''}`;
+    const text = !s.wallet
+      ? `Claims and purchases are transactions from your wallet: it pays the gas in ${NETWORK_LABEL} ETH${est ? ` (${est} each)` : ''}.`
+      : low
+        ? `Your wallet has ${formatEth(s.eth)} ETH on ${NETWORK_LABEL}. Get some (free) to pay for gas${est ? ` (${est} per claim)` : ''}:`
+        : `GAS · ${formatEth(s.eth)} ETH on ${NETWORK_LABEL}${est ? ` · ${est} per claim` : ''}`;
+    this.gas.replaceChildren(h('span', { class: 'nb-wal-gas-row' }, icon('gas', 'nb-wal-gas-ico'), span('nb-wal-gas-t', text)));
+    if (s.wallet) this.gas.append(h('span', { class: 'nb-wal-gas-links' }, ...gasLinks(this.ctx, () => this.say('10 TEST ETH ADDED', 'ok'))));
+    if (s.status === 'error') this.gas.append(span('nb-wal-gas-err', s.error ?? 'RPC unreachable'));
+  }
+
   private renderActions(s: Readonly<ChainState>): void {
-    if (!this.changed('actions', `${s.wallet?.kind}:${s.wallet?.address}:${walletOptions().map((o) => o.id).join()}`)) return;
+    if (!this.changed('actions', `${s.wallet?.address}:${s.restoring}:${walletOptions().map((o) => o.id).join()}`)) return;
     const keep = this.actions.contains(document.activeElement);
-    const btns: HTMLElement[] = [];
-    if (s.wallet?.kind === 'external') {
-      btns.push(button(this.ctx, { label: 'USE GUEST WALLET', icon: 'pilot', onClick: () => this.run(() => chain.useGuest(), 'SWITCHED TO THE GUEST WALLET') }));
+    if (s.wallet) {
+      this.actions.replaceChildren(button(this.ctx, { label: 'DISCONNECT', icon: 'unplug', variant: 'ghost', onClick: () => this.run(() => chain.disconnect(), 'WALLET DISCONNECTED') }));
     } else {
-      const opts = walletOptions().slice(0, 2);
-      for (const o of opts) {
-        btns.push(button(this.ctx, { label: `CONNECT ${o.name.toUpperCase()}`, icon: 'wallet', variant: 'primary', onClick: () => this.run(() => chain.connect(o), `${o.name.toUpperCase()} CONNECTED`) }));
-      }
-      if (!opts.length) btns.push(h('div', { class: 'nb-wal-hint' }, icon('info'), 'No browser wallet detected — the guest wallet works everywhere, no setup needed.'));
-      btns.push(button(this.ctx, { label: 'EXPORT KEY', icon: 'key', variant: 'ghost', onClick: () => this.exportKey() }));
+      this.actions.replaceChildren(
+        h('div', { class: 'nb-wal-connect' }, span('nb-wal-connect-k', 'CONNECT A WALLET TO CLAIM NOVA AND OWN NFTS'), walletChoices(this.ctx, (o) => void this.connect(o))),
+      );
     }
-    this.actions.replaceChildren(...btns);
     if (keep) this.ctx.focus(this.defaultFocus());
+  }
+
+  /** The last match's reward, while it waits to be claimed. */
+  private renderUnclaimed(s: Readonly<ChainState>): void {
+    const m = s.unclaimed;
+    const c = s.claim;
+    const busy = chain.claimBusy;
+    if (!this.changed('unclaimed', `${m?.key}:${c?.status}:${c?.message}:${!!s.wallet}:${s.rewardPerPoint}`)) return;
+    if (!m) {
+      this.unclaimed.replaceChildren();
+      this.unclaimed.style.display = 'none';
+      return;
+    }
+    this.unclaimed.style.display = '';
+    const cta = !s.wallet
+      ? span('nb-wal-unc-hint', 'Connect a wallet above to claim')
+      : button(this.ctx, {
+          label: busy ? (c?.status === 'pending' ? 'MINTING…' : 'CONFIRM IN WALLET') : 'CLAIM',
+          icon: busy ? 'spinner' : 'nova',
+          variant: 'primary',
+          cls: busy ? 'is-busy' : '',
+          onClick: () => void chain.claimReward(),
+        });
+    this.unclaimed.replaceChildren(
+      h('span', { class: 'nb-wal-unc-coin' }, icon('nova')),
+      h(
+        'span',
+        { class: 'nb-wal-unc-text' },
+        span('nb-wal-unc-k', 'UNCLAIMED REWARD'),
+        h('span', { class: 'nb-wal-unc-amt' }, `+${formatNova(chain.rewardFor(m.points))}`, span('nb-wal-unc-u', 'NOVA')),
+        span('nb-wal-unc-sub', c?.status === 'failed' ? (c.message ?? 'Claim failed').toUpperCase() : `${m.points} PTS · LAST MATCH · ${timeAgo(m.at)}`),
+      ),
+      cta,
+    );
+    this.unclaimed.classList.toggle('is-failed', c?.status === 'failed');
   }
 
   private renderCollection(s: Readonly<ChainState>): void {
@@ -191,7 +237,7 @@ export class WalletPanel extends Panel {
     if (!this.changed('collection', owned.map((i) => i.id).join())) return;
     if (!owned.length) {
       const garage = button(this.ctx, { label: 'OPEN GARAGE', icon: 'garage', variant: 'ghost', onClick: () => this.ctx.open('garage') });
-      this.collection.replaceChildren(h('div', { class: 'nb-wal-empty' }, span('nb-wal-empty-t', 'No NFTs yet. Win NOVA on the pitch, then unlock cars and paints.'), garage));
+      this.collection.replaceChildren(h('div', { class: 'nb-wal-empty' }, span('nb-wal-empty-t', 'No NFTs yet. Claim NOVA from your matches, then unlock cars and paints.'), garage));
       return;
     }
     this.collection.replaceChildren(
@@ -210,7 +256,7 @@ export class WalletPanel extends Panel {
   private renderActivity(list: Activity[]): void {
     if (!this.changed('activity', list.map((a) => a.id + a.status).join() + timeAgo(list[0]?.at ?? 0))) return;
     if (!list.length) {
-      this.activity.replaceChildren(h('div', { class: 'nb-wal-empty' }, span('nb-wal-empty-t', 'Finish a match to see your first on-chain reward here.')));
+      this.activity.replaceChildren(h('div', { class: 'nb-wal-empty' }, span('nb-wal-empty-t', 'Your claims and purchases will show up here, with links to the explorer.')));
       return;
     }
     this.activity.replaceChildren(
@@ -246,13 +292,17 @@ export class WalletPanel extends Panel {
       return b;
     };
     this.contracts.replaceChildren(
-      row('NOVA TOKEN', 'ERC-20 + PERMIT', d.nova, tokenUrl(d.nova)),
+      row('NOVA TOKEN', 'ERC-20', d.nova, tokenUrl(d.nova)),
       row('GARAGE', 'ERC-1155 NFTS', d.garage, tokenUrl(d.garage)),
       row('ARENA', 'MATCH REWARDS', d.arena, addressUrl(d.arena)),
     );
   }
 
   // ------------------------------------------------------------------ actions
+
+  private connect(o: WalletOption): Promise<void> {
+    return this.run(() => chain.connect(o), `${o.name.toUpperCase()} CONNECTED`);
+  }
 
   private async run(fn: () => Promise<void>, done: string): Promise<void> {
     if (this.busy) return;
@@ -267,17 +317,6 @@ export class WalletPanel extends Panel {
     } finally {
       this.busy = false;
     }
-  }
-
-  private exportKey(): void {
-    this.ctx.confirm(
-      {
-        title: 'EXPORT GUEST KEY?',
-        body: 'The private key will be copied to your clipboard. Import it into MetaMask to see your NOVA and NFTs there. Anyone holding it controls this testnet wallet.',
-        confirmLabel: 'COPY KEY',
-      },
-      () => void copyText(exportGuestKey()).then((ok) => this.say(ok ? 'PRIVATE KEY COPIED TO CLIPBOARD' : 'COPY FAILED', ok ? 'ok' : 'err')),
-    );
   }
 
   private say(text: string, tone: 'ok' | 'err' | 'busy' = 'ok'): void {

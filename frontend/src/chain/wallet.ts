@@ -64,6 +64,14 @@ interface Eip6963Detail {
 const discovered = new Map<string, WalletOption>();
 let discoveryStarted = false;
 
+/** Listing order of the known wallets (EIP-6963 rdns); any other wallet follows, in announcement order. */
+const WALLET_ORDER = ['io.metamask', 'com.brave.wallet', 'app.phantom'];
+
+function walletRank(id: string): number {
+  const i = WALLET_ORDER.indexOf(id);
+  return i < 0 ? WALLET_ORDER.length : i;
+}
+
 function startDiscovery(): void {
   if (discoveryStarted || typeof window === 'undefined') return;
   discoveryStarted = true;
@@ -77,7 +85,7 @@ function startDiscovery(): void {
 /** Installed browser wallets. */
 export function walletOptions(): WalletOption[] {
   startDiscovery();
-  const list = [...discovered.values()];
+  const list = [...discovered.values()].sort((a, b) => walletRank(a.id) - walletRank(b.id));
   const legacy = (window as unknown as { ethereum?: EIP1193Provider & { isMetaMask?: boolean; isBraveWallet?: boolean; isPhantom?: boolean } }).ethereum;
   if (!list.length && legacy) {
     const name = legacy.isBraveWallet ? 'Brave Wallet' : legacy.isPhantom ? 'Phantom' : legacy.isMetaMask ? 'MetaMask' : 'Browser wallet';

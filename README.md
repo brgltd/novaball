@@ -97,3 +97,18 @@ To host the static game elsewhere (Vercel, GitHub Pages, IPFS…), build it with
 and run `npm start` wherever the relayer lives (CORS is open). All env vars: [frontend/.env.example](frontend/.env.example).
 
 Prices and rewards can be changed after deployment without redeploying — see [contracts/README.md](contracts/README.md#economy-all-adjustable).
+
+## Why Arbitrum
+
+A reward transaction after every match and an NFT mint per purchase only feel instant and free on a chain with fast
+blocks and tiny fees: on Arbitrum the end-screen reward confirms before its count-up animation finishes, and sponsoring
+every player's gas costs the game a fraction of a cent per action — that's what makes the guest-wallet, zero-popup UX
+economically sane. It's plain EVM, so the same contracts, Foundry scripts and viem code target Arbitrum One unchanged
+(`./deploy.sh arbitrum`, `VITE_CHAIN_ID=42161`).
+
+## Roadmap
+
+- **Trustless rewards** — the simulation is already deterministic and every match's seed + final state hash is on-chain;
+  the relayer can re-simulate the submitted input log before minting (and later a fraud-proof / co-processor can).
+- **Multiplayer stakes** — lockstep netcode on the same deterministic sim, with NOVA entry fees escrowed by the arena.
+- **Seasons** — leaderboard snapshots and limited-edition cosmetics minted to the top pilots.

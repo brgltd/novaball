@@ -181,7 +181,9 @@ export class MainMenu extends Panel {
       ? 'CONNECTING…'
       : n > 0
         ? `${n} UNLOCK${n === 1 ? '' : 'S'} AVAILABLE IN THE GARAGE`
-        : `${st.wallet.kind === 'guest' ? 'GUEST WALLET' : st.wallet.label.toUpperCase()} · ${shortAddress(st.wallet.address)}`;
+        : st.balance === 0n && !st.record?.matches
+          ? 'PLAY A MATCH TO EARN NOVA · NO GAS NEEDED'
+          : `${st.wallet.kind === 'guest' ? 'GUEST WALLET' : st.wallet.label.toUpperCase()} · ${shortAddress(st.wallet.address)}`;
     this.walletCard.classList.toggle('has-unlocks', n > 0);
     this.walletCard.classList.toggle('is-offline', st.status === 'error');
   }

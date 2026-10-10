@@ -8,7 +8,7 @@
  * Everything degrades gracefully: no deployment → features off and everything unlocked; RPC down → cached state;
  * relayer down → external wallets with ETH buy directly, rewards say "offline".
  */
-import { createPublicClient, hexToString, http, parseSignature, trim, type PublicClient } from 'viem';
+import { createPublicClient, hexToString, http, parseSignature, serializeSignature, trim, type PublicClient } from 'viem';
 
 import type { MatchSummary } from '../contracts';
 import { novaArenaAbi, novaGarageAbi, novaTokenAbi } from './abi';
@@ -161,6 +161,8 @@ export class NovaChain {
   private refreshing: Promise<void> | null = null;
   /** The wallet whose NFT ownership is loaded (from the chain or this browser's cache). */
   private ownedFor: string | null = null;
+  /** Purchases confirmed by a receipt ("wallet:id" → ms): a lagging RPC read must not un-own them. */
+  private readonly confirmedOwned = new Map<string, number>();
   private readonly reported = new Set<string>();
 
   // ============================================================================ store
@@ -219,7 +221,7 @@ export class NovaChain {
         else if (accounts[0].toLowerCase() !== this.state.wallet?.address.toLowerCase()) void this.reconnect();
       });
     } else this.unwatch = () => {};
-    await this.refresh();
+    await this.refresh(true);
     void this.settlePending();
   }
 
@@ -243,7 +245,10 @@ export class NovaChain {
   }
 
   async connect(opt: WalletOption): Promise<void> {
-    await this.setWallet(await connectExternal(opt));
+    const w = await connectExternal(opt);
+    await this.setWallet(w);
+    // grant the reward session now (one prompt) so match rewards never interrupt the end screen
+    await w.ensureSession().catch((err) => console.warn('[chain] reward session not granted', err));
   }
 
   async useGuest(): Promise<void> {
@@ -253,10 +258,13 @@ export class NovaChain {
 
   // ============================================================================ reads
 
-  /** Reload balance, catalog, inventory and the player's record (coalesced). */
-  refresh(): Promise<void> {
+  /**
+   * Reload balance, catalog, inventory and the player's record. Calls coalesce into the read in flight; `force` (after
+   * a transaction or a wallet switch) runs a fresh read once that one finishes, since it may predate the change.
+   */
+  refresh(force = false): Promise<void> {
     if (!this.pub || !DEPLOYMENT || !this.state.wallet) return Promise.resolve();
-    if (this.refreshing) return this.refreshing;
+    if (this.refreshing) return force ? this.refreshing.then(() => this.refresh()) : this.refreshing;
     const pub = this.pub;
     const d = DEPLOYMENT;
     const who = this.state.wallet.address;
@@ -280,7 +288,13 @@ export class NovaChain {
           price: it.price,
           listed: it.listed,
         }));
-        this.state.owned = new Set(inventory.flatMap((own, i) => (own ? [i + 1] : [])));
+        const owned = new Set(inventory.flatMap((own, i) => (own ? [i + 1] : [])));
+        for (const [k, t] of this.confirmedOwned) {
+          const [addr, id] = k.split(':');
+          if (Date.now() - t > 120_000) this.confirmedOwned.delete(k);
+          else if (addr === who) owned.add(Number(id));
+        }
+        this.state.owned = owned;
         this.ownedFor = who;
         this.state.balance = balance;
         this.state.rewardPerPoint = rewardPerPoint;
@@ -317,7 +331,16 @@ export class NovaChain {
   /** Every pilot with a record on NovaArena, best first (NOVA earned, then wins). */
   async leaderboard(limit = 50): Promise<LeaderRow[]> {
     if (!this.pub || !DEPLOYMENT) return [];
-    const [addrs, recs] = await this.pub.readContract({ address: DEPLOYMENT.arena, abi: novaArenaAbi, functionName: 'getPlayers', args: [0n, 500n] });
+    const pub = this.pub;
+    const arena = DEPLOYMENT.arena;
+    const total = Number(await pub.readContract({ address: arena, abi: novaArenaAbi, functionName: 'playerCount' }));
+    const pages = await Promise.all(
+      Array.from({ length: Math.min(20, Math.ceil(total / 500)) }, (_, p) =>
+        pub.readContract({ address: arena, abi: novaArenaAbi, functionName: 'getPlayers', args: [BigInt(p * 500), 500n] }),
+      ),
+    );
+    const addrs = pages.flatMap((pg) => pg[0]);
+    const recs = pages.flatMap((pg) => pg[1]);
     const me = this.state.wallet?.address.toLowerCase();
     return addrs
       .map((address, i) => {
@@ -367,8 +390,8 @@ export class NovaChain {
     const w = this.state.wallet;
     const it = this.state.catalog.find((i) => i.id === itemId);
     if (!d || !pub || !w || !it) throw new Error('Wallet not ready');
-    const cur = this.state.purchases.get(itemId);
-    if (cur && (cur.status === 'signing' || cur.status === 'sending' || cur.status === 'pending')) return;
+    // one purchase at a time: two in flight would sign the same garage / token nonces
+    if (this.purchaseBusy) throw new Error('Another purchase is in progress');
     const setP = (p: Omit<PurchaseState, 'itemId'>) => {
       this.state.purchases.set(itemId, { itemId, ...p });
       this.emit();
@@ -403,7 +426,7 @@ export class NovaChain {
         const { r, s, v, yParity } = parseSignature(sig);
         permit = { value: price.toString(), deadline, v: Number(v ?? BigInt(yParity + 27)), r, s };
       }
-      const signature = await w.signTypedData({
+      const rawSignature = await w.signTypedData({
         domain: { name: 'NOVABALL Garage', version: '1', chainId: CHAIN_ID, verifyingContract: d.garage },
         types: {
           Purchase: [
@@ -417,6 +440,8 @@ export class NovaChain {
         primaryType: 'Purchase',
         message: { buyer: w.address, itemId: BigInt(itemId), maxPrice: price, nonce, deadline: BigInt(deadline) },
       });
+      // some wallets return v as 0/1; OpenZeppelin's ECDSA wants 27/28
+      const signature = serializeSignature(parseSignature(rawSignature));
       setP({ status: 'sending' });
       const req: PurchaseRequest = { buyer: w.address, itemId, maxPrice: price.toString(), deadline, signature, permit };
       let hash: Hex;
@@ -430,15 +455,23 @@ export class NovaChain {
       const act = this.pushActivity({ kind: 'purchase', title: `${it.name}${it.kind === 'paint' ? ' PAINT' : ''} NFT`, amount: (-price).toString(), hash });
       const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 90_000 });
       if (receipt.status !== 'success') throw new Error('The purchase transaction reverted');
-      this.state.owned.add(itemId);
-      this.state.balance = (this.state.balance ?? price) - price;
-      this.settleActivity(act, 'confirmed');
+      this.confirmedOwned.set(`${w.address}:${itemId}`, Date.now());
+      if (this.state.wallet?.address === w.address) {
+        this.state.owned.add(itemId);
+        this.state.balance = (this.state.balance ?? price) - price;
+        this.settleActivity(act, 'confirmed');
+      }
       setP({ status: 'done', hash });
-      void this.refresh();
+      void this.refresh(true);
     } catch (err) {
       setP({ status: 'error', message: friendly(err) });
       throw err;
     }
+  }
+
+  /** A purchase is being signed, sent or mined. */
+  get purchaseBusy(): boolean {
+    return [...this.state.purchases.values()].some((p) => p.status === 'signing' || p.status === 'sending' || p.status === 'pending');
   }
 
   /** Relayer unreachable: an external wallet holding ETH can still buy by itself (approve + buy). */
@@ -469,7 +502,7 @@ export class NovaChain {
     this.reported.add(key);
     const points = Math.max(0, Math.round(me.stats.score));
     const counted = this.state.maxPoints ? Math.min(points, this.state.maxPoints) : points;
-    const report: MatchReport = {
+    const report: Omit<MatchReport, 'signature' | 'session'> = {
       player: this.state.wallet.address,
       callsign: (me.name || 'PLAYER').toUpperCase().replace(/[^A-Z0-9 _\-.]/g, '').slice(0, 12).trim() || 'PLAYER',
       team: me.team,
@@ -485,7 +518,19 @@ export class NovaChain {
     };
     this.state.reward = { key, status: 'sending', points: counted, amount: BigInt(counted) * this.state.rewardPerPoint };
     this.emit();
-    void this.submitReward(report, key);
+    void this.signAndSubmit(this.state.wallet, report, key);
+  }
+
+  /** The report is signed by the player's wallet (guest) or its reward session key (external) — no popup. */
+  private async signAndSubmit(w: NovaWallet, report: Omit<MatchReport, 'signature' | 'session'>, key: string): Promise<void> {
+    try {
+      const signed = await w.signReport({ player: report.player, seed: BigInt(report.seed), stateHash: BigInt(report.stateHash), points: BigInt(report.points) });
+      await this.submitReward({ ...report, ...signed }, key);
+    } catch (err) {
+      if (this.state.reward?.key !== key) return;
+      this.state.reward = { ...this.state.reward, status: 'failed', message: friendly(err) };
+      this.emit();
+    }
   }
 
   private async submitReward(report: MatchReport, key: string, attempt = 0): Promise<void> {
@@ -494,6 +539,7 @@ export class NovaChain {
       this.state.reward = { ...this.state.reward, ...patch };
       this.emit();
     };
+    const retry = (ms: number) => window.setTimeout(() => void this.submitReward(report, key, attempt + 1), ms);
     try {
       const r = await this.relay<MatchReceipt>('match', report);
       const amount = BigInt(r.amount);
@@ -503,17 +549,24 @@ export class NovaChain {
       if (receipt.status !== 'success') throw new Error('The reward transaction reverted');
       this.settleActivity(act, 'confirmed');
       set({ status: 'confirmed' });
-      await this.refresh();
+      await this.refresh(true);
     } catch (err) {
-      if (err instanceof RelayHttpError && err.body.error === 'CooldownActive' && err.body.retryAt && attempt < 2) {
-        // a real match outlasts the cooldown; quick rematches just wait for it
-        set({ status: 'cooldown', retryAt: err.body.retryAt, message: err.body.message });
-        const wait = Math.max(1000, err.body.retryAt * 1000 - Date.now() + 1500);
-        window.setTimeout(() => void this.submitReward(report, key, attempt + 1), wait);
+      const relayErr = err instanceof RelayHttpError ? err : null;
+      if (relayErr?.body.error === 'AlreadyRecorded') {
+        set({ status: 'confirmed' }); // an earlier attempt landed after all
+        void this.refresh(true);
         return;
       }
-      const offline = !(err instanceof RelayHttpError) || err.status >= 502;
+      if (relayErr?.body.error === 'CooldownActive' && relayErr.body.retryAt && attempt < 3) {
+        // a real match outlasts the cooldown; quick rematches just wait for it
+        set({ status: 'cooldown', retryAt: relayErr.body.retryAt, message: relayErr.body.message });
+        retry(Math.max(1000, relayErr.body.retryAt * 1000 - Date.now() + 1500));
+        return;
+      }
+      const offline = !relayErr || relayErr.status >= 500 || relayErr.status === 429;
       set({ status: offline ? 'offline' : 'failed', message: friendly(err) });
+      // the relayer / RPC may be back in a moment: retry the same signed report (duplicates are rejected on-chain)
+      if (offline && attempt < 3) retry(5000 * 3 ** attempt);
     }
   }
 

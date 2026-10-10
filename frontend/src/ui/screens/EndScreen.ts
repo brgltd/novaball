@@ -243,7 +243,8 @@ export class EndScreen extends Panel {
     this.reward.className = `nb-reward is-${status}`;
     this.countTo(r?.amount ?? 0n);
     const rate = formatNova(chain.state.rewardPerPoint, 2);
-    const pts = !r ? '' : r.points === 0 ? 'NO POINTS — EVERY TOUCH EARNS NOVA' : `${r.points} PTS × ${rate} NOVA`;
+    const pts = !r ? '' : r.points === 0 ? 'NO POINTS — EVERY TOUCH EARNS NOVA' : `${r.points} PTS`;
+    this.reward.title = `${rate} NOVA per match point`;
     this.rewardSub.replaceChildren(pts ? span('nb-reward-pts', pts) : '', span('nb-reward-status', this.statusText(r)));
     const can = status === 'confirmed' && chain.affordable().length > 0;
     this.rewardCta.replaceChildren(

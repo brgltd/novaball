@@ -1,6 +1,20 @@
 /** Node http ⇄ Fetch API adapter for the relayer's `handle(Request) → Response`. */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { CLIENT_IP_HEADER } from './relayer.ts';
+
+/** Behind a reverse proxy (Render, Railway, Fly, nginx…) set TRUST_PROXY=1 to rate-limit by X-Forwarded-For. */
+const TRUST_PROXY = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
+
+function clientIp(req: IncomingMessage): string {
+  if (TRUST_PROXY) {
+    const xff = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 export type FetchHandler = (req: Request) => Promise<Response>;
 
 export async function toRequest(req: IncomingMessage, url: string): Promise<Request> {
@@ -9,6 +23,7 @@ export async function toRequest(req: IncomingMessage, url: string): Promise<Requ
     if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
     else if (v !== undefined) headers.set(k, v);
   }
+  headers.set(CLIENT_IP_HEADER, clientIp(req)); // overrides anything the client sent
   let body: Buffer | undefined;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     const chunks: Buffer[] = [];

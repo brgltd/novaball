@@ -1,5 +1,5 @@
 /**
- * Wire format between the web app and the NOVABALL relayer (server/relayer.ts). Types only — shared by both sides.
+ * Wire format between the web app and the NOVABALL relayer (server/relayer.ts), shared by both sides (no imports).
  *
  *   GET  /api/status    → RelayStatus
  *   POST /api/match     MatchReport     → MatchReceipt   (the server records the match and mints the reward)
@@ -10,6 +10,36 @@ export type Address = `0x${string}`;
 export type Hex = `0x${string}`;
 
 export type DifficultyName = 'rookie' | 'pro' | 'legend';
+
+/**
+ * Match reports are signed, so nobody can file reports for someone else's address (and burn their reward cooldown).
+ * A guest wallet signs MatchReport itself; an external wallet signs a Session once (at connect) that delegates to a
+ * key kept in this browser, which then signs each MatchReport without a popup.
+ */
+export const REPORT_DOMAIN = { name: 'NOVABALL', version: '1' } as const;
+export const SESSION_TYPES = {
+  Session: [
+    { name: 'player', type: 'address' },
+    { name: 'sessionKey', type: 'address' },
+    { name: 'expires', type: 'uint256' },
+  ],
+} as const;
+export const REPORT_TYPES = {
+  MatchReport: [
+    { name: 'player', type: 'address' },
+    { name: 'seed', type: 'uint256' },
+    { name: 'stateHash', type: 'uint256' },
+    { name: 'points', type: 'uint256' },
+  ],
+} as const;
+
+export interface SessionGrant {
+  key: Address;
+  /** Unix seconds. */
+  expires: number;
+  /** The player's EIP-712 Session signature. */
+  signature: Hex;
+}
 
 export interface MatchReport {
   player: Address;
@@ -28,6 +58,9 @@ export interface MatchReport {
   score: [number, number];
   winner: -1 | 0 | 1;
   overtime: boolean;
+  /** EIP-712 MatchReport signature, by the player or by its session key. */
+  signature: Hex;
+  session?: SessionGrant;
 }
 
 export interface TxReceiptRef {

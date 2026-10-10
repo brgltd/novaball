@@ -91,7 +91,9 @@ npm ci && npm run build         # builds for Arbitrum Sepolia by default (VITE_C
 RELAYER_PRIVATE_KEY=0x… npm start   # serves dist/ and /api on $PORT (default 8787)
 ```
 
-`RELAYER_PRIVATE_KEY` is the key of the address that got `GAME_SERVER_ROLE` (by default the deployer, so the same key).
+`RELAYER_PRIVATE_KEY` is the key of the address that got `GAME_SERVER_ROLE` (by default the deployer, so the same key —
+for anything beyond a demo give the relayer its own key, see `contracts/.env.example`). On a PaaS behind a router, set
+`TRUST_PROXY=1` so rate limits use the real client IP.
 Keep it topped up with a little Arbitrum Sepolia ETH — a match reward or a purchase costs a fraction of a cent.
 To host the static game elsewhere (Vercel, GitHub Pages, IPFS…), build it with `VITE_RELAYER_URL=https://<relayer>/api`
 and run `npm start` wherever the relayer lives (CORS is open). All env vars: [frontend/.env.example](frontend/.env.example).

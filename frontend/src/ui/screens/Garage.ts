@@ -368,7 +368,10 @@ export class Garage extends Panel {
     const label = kind === 'car' ? (CAR_STYLES.find((c) => c.id === it.key)?.name ?? it.name) : (PAINTS.find((x) => x.name.toLowerCase() === it.key)?.name.toUpperCase() ?? it.name);
 
     let btn: HTMLButtonElement;
-    if (busy) {
+    if (!busy && chain.purchaseBusy) {
+      // one purchase at a time (each one signs the wallet's next nonce)
+      btn = h('button', { class: 'nb-btn nb-btn-secondary nb-gar-buy is-busy', type: 'button', 'data-nav': '', title: 'Another purchase is in progress' }, h('span', { class: 'nb-btn-inner' }, span('nb-btn-label', 'WAIT')));
+    } else if (busy) {
       const text = p!.status === 'signing' ? (st.wallet?.kind === 'external' ? 'CONFIRM IN WALLET' : 'SIGNING') : p!.status === 'sending' ? 'SENDING' : 'MINTING NFT';
       btn = h('button', { class: 'nb-btn nb-btn-primary nb-gar-buy is-busy', type: 'button', 'data-nav': '' }, h('span', { class: 'nb-btn-inner' }, icon('spinner', 'nb-btn-ico nb-spin'), span('nb-btn-label', text)));
     } else if (short > 0n) {

@@ -14,8 +14,8 @@ import {NovaToken} from "../src/NovaToken.sol";
 ///         and its relayer).
 ///
 /// Environment (all optional except PRIVATE_KEY on public networks; see .env.example):
-///   PRIVATE_KEY             deployer key (default: anvil account #0 — local only)
-///   RELAYER_ADDRESS         game server / gas relayer that records matches (default: anvil #1 locally, else deployer)
+///   PRIVATE_KEY             deployer key (the local chain always uses anvil account #0)
+///   RELAYER_ADDRESS         game server / gas relayer that records matches (default: deployer; anvil #1 locally)
 ///   CAR_PRICE               NOVA per car body       (default 100)
 ///   PAINT_PRICE             NOVA per paint          (default 20)
 ///   REWARD_PER_100_POINTS   NOVA minted per 100 match points (default 100, i.e. 1 NOVA / point)
@@ -34,9 +34,10 @@ contract Deploy is Script {
 
     function run() external returns (NovaToken nova, NovaGarage garage, NovaArena arena) {
         bool local = block.chainid == 31_337;
-        uint256 pk = local ? vm.envOr("PRIVATE_KEY", ANVIL_KEY_0) : vm.envUint("PRIVATE_KEY");
+        // the local chain always uses anvil accounts (contracts/.env holds the public-network keys)
+        uint256 pk = local ? ANVIL_KEY_0 : vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
-        address relayer = vm.envOr("RELAYER_ADDRESS", local ? ANVIL_ADDR_1 : deployer);
+        address relayer = local ? ANVIL_ADDR_1 : vm.envOr("RELAYER_ADDRESS", deployer);
         uint128 carPrice = SafeCast.toUint128(vm.envOr("CAR_PRICE", uint256(100)) * 1e18);
         uint128 paintPrice = SafeCast.toUint128(vm.envOr("PAINT_PRICE", uint256(20)) * 1e18);
         uint256 rewardPerPoint = vm.envOr("REWARD_PER_100_POINTS", uint256(100)) * 1e16;

@@ -14,7 +14,7 @@ import {
 } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
-import type { Address, Hex } from './api';
+import { REPORT_DOMAIN, REPORT_TYPES, SESSION_TYPES, type Address, type Hex, type SessionGrant } from './api';
 import { CHAIN, CHAIN_ID, EXPLORER, RPC_URL, WALLET_RPC_URL } from './config';
 
 export type WalletKind = 'guest' | 'external';
@@ -31,7 +31,21 @@ export interface NovaWallet {
   signTypedData(def: TypedDataDefinition<any, any>): Promise<Hex>;
   /** External wallets: make sure the wallet is on our chain (prompts a switch / add). */
   ensureChain(): Promise<void>;
+  /** Sign a match report (guest: directly; external: with a session key, granted once by the wallet). */
+  signReport(m: ReportMessage): Promise<{ signature: Hex; session?: SessionGrant }>;
+  /** External wallets: make sure a reward session is granted (one signature prompt, valid 30 days). */
+  ensureSession(): Promise<void>;
 }
+
+export interface ReportMessage {
+  player: Address;
+  seed: bigint;
+  stateHash: bigint;
+  points: bigint;
+}
+
+const REPORT = { domain: { ...REPORT_DOMAIN, chainId: CHAIN_ID }, types: REPORT_TYPES, primaryType: 'MatchReport' } as const;
+const SESSION_TTL_S = 30 * 86400;
 
 export interface WalletOption {
   id: string;
@@ -41,6 +55,7 @@ export interface WalletOption {
 }
 
 const GUEST_KEY = 'novaball.guestWallet.v1';
+const SESSION_KEY = 'novaball.rewardSession.v1';
 const MODE_KEY = 'novaball.walletMode.v1';
 
 function store(key: string, value: string | null): void {
@@ -84,6 +99,8 @@ export function guestWallet(): NovaWallet {
     client,
     signTypedData: (def) => account.signTypedData(def),
     ensureChain: async () => {},
+    signReport: async (message) => ({ signature: await account.signTypedData({ ...REPORT, message }) }),
+    ensureSession: async () => {},
   };
 }
 
@@ -152,9 +169,43 @@ async function ensureProviderChain(provider: EIP1193Provider): Promise<void> {
   }
 }
 
+interface StoredSession {
+  pk: Hex;
+  key: Address;
+  expires: number;
+  signature: Hex;
+}
+
 function externalWallet(opt: WalletOption, address: Address): NovaWallet {
   const client = createWalletClient({ account: address, chain: CHAIN, transport: custom(opt.provider) });
   const ensureChain = () => ensureProviderChain(opt.provider);
+  const storeKey = `${SESSION_KEY}:${CHAIN_ID}:${address.toLowerCase()}`;
+  const loadSession = (): StoredSession | null => {
+    try {
+      const s = JSON.parse(read(storeKey) ?? 'null') as StoredSession | null;
+      return s && s.expires - 86400 > Date.now() / 1000 ? s : null;
+    } catch {
+      return null;
+    }
+  };
+  const ensureSession = async (): Promise<StoredSession> => {
+    const cur = loadSession();
+    if (cur) return cur;
+    const pk = generatePrivateKey();
+    const key = privateKeyToAccount(pk).address;
+    const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_S;
+    await ensureChain();
+    const signature = await client.signTypedData({
+      account: address,
+      domain: { ...REPORT_DOMAIN, chainId: CHAIN_ID },
+      types: SESSION_TYPES,
+      primaryType: 'Session',
+      message: { player: address, sessionKey: key, expires: BigInt(expires) },
+    });
+    const s: StoredSession = { pk, key, expires, signature };
+    store(storeKey, JSON.stringify(s));
+    return s;
+  };
   return {
     kind: 'external',
     address,
@@ -165,6 +216,12 @@ function externalWallet(opt: WalletOption, address: Address): NovaWallet {
     signTypedData: async (def) => {
       await ensureChain();
       return client.signTypedData({ account: address, ...def });
+    },
+    ensureSession: async () => void (await ensureSession()),
+    signReport: async (message) => {
+      const s = await ensureSession();
+      const signature = await privateKeyToAccount(s.pk).signTypedData({ ...REPORT, message });
+      return { signature, session: { key: s.key, expires: s.expires, signature: s.signature } };
     },
   };
 }

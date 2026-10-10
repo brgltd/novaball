@@ -30,7 +30,9 @@ Players never need ETH:
 Matches are simulated in the browser, so the reported points can't be proven on-chain today. The arena bounds what a
 single report can do:
 
-- only `GAME_SERVER_ROLE` can record matches;
+- only `GAME_SERVER_ROLE` can record matches — and the relayer only files a report signed by the player (EIP-712
+  `MatchReport`; a browser wallet delegates once to a session key so rewards never prompt), so nobody can burn another
+  player's cooldown; per-IP, per-player and global per-minute budgets cap the relayer's gas spend;
 - points per player per match are capped (`maxPointsPerMatch`, default 3000);
 - a player can be rewarded at most once per `matchCooldown` (default 60 s — a real match lasts ≥ 2 min);
 - an identical report can't be recorded twice;

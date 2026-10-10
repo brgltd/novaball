@@ -66,6 +66,6 @@ contract Configure is Script {
     }
 
     function _key() internal view returns (uint256) {
-        return block.chainid == 31_337 ? vm.envOr("PRIVATE_KEY", ANVIL_KEY_0) : vm.envUint("PRIVATE_KEY");
+        return block.chainid == 31_337 ? ANVIL_KEY_0 : vm.envUint("PRIVATE_KEY");
     }
 }

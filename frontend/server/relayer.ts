@@ -6,8 +6,11 @@
  * - Submits players' EIP-712-signed garage purchases (NovaGarage.buyFor / buyForWithPermit) and pays the gas, so a
  *   brand-new wallet with 0 ETH can buy NFTs.
  *
- * Framework-free: `handle(Request) → Response` (Fetch API). Mounted by the Vite dev server (server/vite.ts), the
- * standalone Node server (server/node.ts) and Vercel functions (api/*.ts).
+ * Framework-free: `handle(Request) → Response` (Fetch API). Mounted by the Vite dev server (server/vite.ts) and the
+ * standalone Node server (server/node.ts), whose adapter sets the trusted client IP header (server/http.ts).
+ *
+ * Abuse bounds: match reports must be signed by the player (or its session key); per-IP, per-player and global
+ * per-minute budgets cap the gas the relayer spends; the contracts cap what any single report can mint.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,6 +18,8 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   createPublicClient,
+  decodeErrorResult,
+  recoverTypedDataAddress,
   createWalletClient,
   formatEther,
   http,
@@ -27,8 +32,12 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrum, arbitrumSepolia, foundry } from 'viem/chains';
 
-import { novaArenaAbi, novaGarageAbi } from '../src/chain/abi.ts';
-import type { Address, Hex, MatchReceipt, MatchReport, PurchaseRequest, RelayError, RelayStatus, TxReceiptRef } from '../src/chain/api.ts';
+import { novaArenaAbi, novaGarageAbi, novaTokenAbi } from '../src/chain/abi.ts';
+import { REPORT_DOMAIN, REPORT_TYPES, SESSION_TYPES } from '../src/chain/api.ts';
+import type { Address, Hex, MatchReceipt, MatchReport, PurchaseRequest, RelayError, RelayStatus, SessionGrant, TxReceiptRef } from '../src/chain/api.ts';
+
+/** Header carrying the client IP, set by the trusted HTTP adapter (never taken from the client). */
+export const CLIENT_IP_HEADER = 'x-novaball-client-ip';
 
 export interface Deployment {
   chainId: number;
@@ -44,6 +53,8 @@ export interface RelayerOptions {
   privateKey: Hex;
   deployment: Deployment;
   rpcUrl?: string;
+  /** Transactions the relayer may send per minute, all players together (default 120). */
+  maxTxPerMinute?: number;
   /** Log lines (default console.log). */
   log?: (msg: string) => void;
 }
@@ -71,7 +82,7 @@ export function optionsFromEnv(env: Record<string, string | undefined>, defaultC
   if (!deployment) return { error: `no deployment for chain ${chainId} (run contracts/script/Deploy.s.sol)` };
   const privateKey = (env.RELAYER_PRIVATE_KEY || (chainId === foundry.id ? ANVIL_RELAYER_KEY : '')) as Hex;
   if (!isHex(privateKey) || privateKey.length !== 66) return { error: 'RELAYER_PRIVATE_KEY is not set' };
-  return { chainId, privateKey, deployment, rpcUrl: env.RPC_URL || env.VITE_RPC_URL || undefined };
+  return { chainId, privateKey, deployment, rpcUrl: env.RPC_URL || env.VITE_RPC_URL || undefined, maxTxPerMinute: Number(env.RELAYER_MAX_TX_PER_MIN) || undefined };
 }
 
 class HttpError extends Error {
@@ -103,9 +114,18 @@ class Limiter {
       return list[0] + this.windowMs - now;
     }
     list.push(now);
+    this.hits.delete(key); // re-insert: the Map stays ordered by last activity
     this.hits.set(key, list);
-    if (this.hits.size > 10_000) this.hits.clear();
+    if (this.hits.size > 20_000) this.prune(now);
     return null;
+  }
+  /** Drop expired keys; if still too many, the least recently active ones (never everyone's history at once). */
+  private prune(now: number): void {
+    for (const [k, l] of this.hits) if (now - l[l.length - 1] >= this.windowMs) this.hits.delete(k);
+    for (const k of this.hits.keys()) {
+      if (this.hits.size <= 15_000) break;
+      this.hits.delete(k);
+    }
   }
 }
 
@@ -120,7 +140,11 @@ export function createRelayer(opts: RelayerOptions) {
   // matches: the contract's cooldown is the real limit; purchases: bounded by the buyer's NOVA anyway
   const perPlayer = new Limiter(3, 60_000);
   const perBuyer = new Limiter(12, 60_000);
-  const perIp = new Limiter(60, 60_000);
+  const perIp = new Limiter(30, 60_000);
+  const globalBudget = new Limiter(opts.maxTxPerMinute ?? 120, 60_000);
+  const domain = { ...REPORT_DOMAIN, chainId: chain.id };
+  const sessions = new Map<string, number>(); // verified "player:key:expires:sig" → expires
+  let maxPoints = 0;
 
   // ------------------------------------------------------------------ routes
 
@@ -131,7 +155,11 @@ export function createRelayer(opts: RelayerOptions) {
 
   async function recordMatch(body: unknown): Promise<MatchReceipt> {
     const r = parseMatch(body);
+    await verifyReport(r);
     limit(perPlayer, `m:${r.player.toLowerCase()}`);
+    // over the cap → reward the cap (instead of a revert)
+    maxPoints ||= await publicClient.readContract({ address: arena, abi: novaArenaAbi, functionName: 'maxPointsPerMatch' });
+    r.points = Math.min(r.points, maxPoints);
     const result = {
       seed: BigInt(r.seed),
       stateHash: r.stateHash,
@@ -148,6 +176,7 @@ export function createRelayer(opts: RelayerOptions) {
       publicClient.simulateContract({ account, address: arena, abi: novaArenaAbi, functionName: 'recordMatch', args: [result, players] }),
     );
     const amount = (await publicClient.readContract({ address: arena, abi: novaArenaAbi, functionName: 'rewardPerPoint' })) * BigInt(r.points);
+    limit(globalBudget, 'tx');
     const hash = await wallet.writeContract(sim.request);
     log(`[relayer] match ${r.callsign} ${r.player} ${r.points} pts → ${formatEther(amount)} NOVA  ${hash}`);
     return { hash, matchId: sim.result, points: r.points, amount: amount.toString() };
@@ -155,7 +184,6 @@ export function createRelayer(opts: RelayerOptions) {
 
   async function purchase(body: unknown): Promise<TxReceiptRef> {
     const p = parsePurchase(body);
-    limit(perBuyer, `p:${p.buyer.toLowerCase()}`);
     const base = [p.buyer, BigInt(p.itemId), BigInt(p.maxPrice), BigInt(p.deadline), p.signature] as const;
     let hash: Hex;
     if (p.permit) {
@@ -163,13 +191,54 @@ export function createRelayer(opts: RelayerOptions) {
       const sim = await simulate(() =>
         publicClient.simulateContract({ account, address: garage, abi: novaGarageAbi, functionName: 'buyForWithPermit', args: [...base, permit] }),
       );
+      spend(p.buyer);
       hash = await wallet.writeContract(sim.request);
     } else {
       const sim = await simulate(() => publicClient.simulateContract({ account, address: garage, abi: novaGarageAbi, functionName: 'buyFor', args: base }));
+      spend(p.buyer);
       hash = await wallet.writeContract(sim.request);
     }
     log(`[relayer] purchase item ${p.itemId} for ${p.buyer}  ${hash}`);
     return { hash };
+  }
+
+  /** Purchase budgets count only purchases that simulate fine (a valid signature): junk can't lock a buyer out. */
+  function spend(buyer: Address): void {
+    limit(perBuyer, `p:${buyer.toLowerCase()}`);
+    limit(globalBudget, 'tx');
+  }
+
+  /** The report must be signed by the player, or by a session key the player delegated to. */
+  async function verifyReport(r: MatchReport): Promise<void> {
+    const unauthorized = (message: string) => new HttpError(401, { error: 'unauthorized', message });
+    let signer: Address;
+    try {
+      signer = await recoverTypedDataAddress({
+        domain,
+        types: REPORT_TYPES,
+        primaryType: 'MatchReport',
+        message: { player: r.player, seed: BigInt(r.seed), stateHash: BigInt(r.stateHash), points: BigInt(r.points) },
+        signature: r.signature,
+      });
+    } catch {
+      throw unauthorized('Invalid match report signature');
+    }
+    const s = r.session;
+    if (!s) {
+      if (signer.toLowerCase() !== r.player.toLowerCase()) throw unauthorized('The match report is not signed by the player');
+      return;
+    }
+    if (s.expires * 1000 < Date.now()) throw unauthorized('The reward session expired — reconnect your wallet');
+    if (signer.toLowerCase() !== s.key.toLowerCase()) throw unauthorized('The match report is not signed by the session key');
+    const id = `${r.player}:${s.key}:${s.expires}:${s.signature}`.toLowerCase();
+    if (sessions.has(id)) return;
+    // EOAs and smart-contract wallets (ERC-1271 / ERC-6492)
+    const ok = await publicClient
+      .verifyTypedData({ address: r.player, domain, types: SESSION_TYPES, primaryType: 'Session', message: { player: r.player, sessionKey: s.key, expires: BigInt(s.expires) }, signature: s.signature })
+      .catch(() => false);
+    if (!ok) throw unauthorized('The reward session is not signed by the player');
+    if (sessions.size > 10_000) sessions.clear();
+    sessions.set(id, s.expires);
   }
 
   // ------------------------------------------------------------------ plumbing
@@ -195,7 +264,7 @@ export function createRelayer(opts: RelayerOptions) {
     const route = url.pathname.replace(/\/+$/, '').split('/').pop();
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     try {
-      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'local';
+      const ip = req.headers.get(CLIENT_IP_HEADER) || 'unknown';
       if (route === 'status' && req.method === 'GET') return json(200, await status());
       if (req.method !== 'POST' || (route !== 'match' && route !== 'purchase')) return json(404, { error: 'not_found', message: 'Unknown endpoint' });
       limit(perIp, ip);
@@ -247,7 +316,7 @@ function parseMatch(body: unknown): MatchReport {
   const winner = int(b.winner, 'winner', -1, 1) as -1 | 0 | 1;
   const expected = score[0] === score[1] ? -1 : score[0] > score[1] ? 0 : 1;
   if (winner !== expected) throw bad('winner does not match the score');
-  return {
+  const fields = {
     player: addr(b.player, 'player'),
     callsign,
     team: int(b.team, 'team', 0, 1) as 0 | 1,
@@ -261,6 +330,14 @@ function parseMatch(body: unknown): MatchReport {
     winner,
     overtime: b.overtime,
   };
+  if (typeof b.signature !== 'string' || !isHex(b.signature)) throw bad('signature must be hex');
+  let session: SessionGrant | undefined;
+  if (b.session !== undefined && b.session !== null) {
+    const ss = obj(b.session);
+    if (typeof ss.signature !== 'string' || !isHex(ss.signature)) throw bad('session.signature must be hex');
+    session = { key: addr(ss.key, 'session.key'), expires: int(ss.expires, 'session.expires', 0, 2 ** 40), signature: ss.signature as Hex };
+  }
+  return { ...fields, signature: b.signature as Hex, session };
 }
 
 function parsePurchase(body: unknown): PurchaseRequest {
@@ -302,10 +379,19 @@ function toHttpError(err: unknown): HttpError {
   if (err instanceof BaseError) {
     const revert = err.walk((e) => e instanceof ContractFunctionRevertedError);
     if (revert instanceof ContractFunctionRevertedError) {
-      const name = revert.data?.errorName ?? 'reverted';
-      const args = revert.data?.args ?? [];
+      let data: { errorName: string; args?: readonly unknown[] } | undefined = revert.data;
+      if (!data && revert.raw) {
+        try {
+          data = decodeErrorResult({ abi: novaTokenAbi, data: revert.raw }); // NOVA errors bubbling out of the garage
+        } catch {
+          /* unknown error */
+        }
+      }
+      const name = data?.errorName ?? 'reverted';
+      const args = data?.args ?? [];
       const retryAt = name === 'CooldownActive' ? Number(args[1]) : undefined;
       const status = name === 'AccessControlUnauthorizedAccount' ? 503 : name === 'CooldownActive' ? 429 : 409;
+      if (name === 'reverted') return new HttpError(status, { error: name, message: revert.shortMessage });
       return new HttpError(status, { error: name, message: MESSAGES[name] ?? revert.shortMessage, retryAt });
     }
     if (/insufficient funds/i.test(err.message)) {

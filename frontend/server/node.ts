@@ -48,7 +48,13 @@ createServer((req, res) => {
     res.statusCode = 405;
     return res.end();
   }
-  const path = normalize(decodeURIComponent(url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  let path: string;
+  try {
+    path = normalize(decodeURIComponent(url.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
+  } catch {
+    res.statusCode = 400;
+    return res.end('Bad request');
+  }
   let file = join(dist, path);
   if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) file = join(dist, 'index.html');
   if (!existsSync(file)) {

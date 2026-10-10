@@ -47,7 +47,7 @@ contract Configure is Script {
 
     function rewards() external {
         NovaArena arena = NovaArena(_addr(".arena"));
-        uint256 rewardPerPoint = vm.envOr("REWARD_PER_100_POINTS", uint256(50)) * 1e16;
+        uint256 rewardPerPoint = vm.envOr("REWARD_PER_100_POINTS", uint256(100)) * 1e16;
         uint32 maxPoints = SafeCast.toUint32(vm.envOr("MAX_POINTS_PER_MATCH", uint256(3000)));
         uint32 cooldown = SafeCast.toUint32(vm.envOr("MATCH_COOLDOWN", uint256(60)));
         vm.startBroadcast(_key());

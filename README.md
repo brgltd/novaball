@@ -25,7 +25,7 @@ contracts/   Solidity + Foundry: NovaToken (ERC-20), NovaGarage (ERC-1155), Nova
 
 | | How | Why it's frictionless |
 |---|---|---|
-| **NOVA token** (ERC-20 + permit) | Minted by `NovaArena` when a match is recorded: `points × 0.5 NOVA` for every human player | Pushed by the game server — the player signs nothing |
+| **NOVA token** (ERC-20 + permit) | Minted by `NovaArena` when a match is recorded: `1 NOVA per match point` for every human player | Pushed by the game server — the player signs nothing |
 | **Proportional match rewards** | The relayer records seed, deterministic final-state hash, score and each player's points on-chain | Happens while the end screen animates |
 | **NFT cosmetics** (ERC-1155, on-chain SVG art) | Cars 100 NOVA, paints 20 NOVA (configurable). Buying burns the NOVA | EIP-712 purchase + ERC-2612 permit signatures; the relayer submits and pays gas |
 | **Ownership-gated garage** | STRIKER + ARCTIC are free; everything else needs the NFT in your wallet | Locked items still preview, so you see what you're buying |

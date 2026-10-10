@@ -46,11 +46,11 @@ single report can do:
 | Car body price | 100 NOVA | `CAR_PRICE=… forge script script/Configure.s.sol --sig "prices()" …` |
 | Paint price | 20 NOVA | `PAINT_PRICE=…` (same command) |
 | One item | — | `forge script script/Configure.s.sol --sig "price(string,uint256)" toxic 35 …` |
-| Reward | 0.5 NOVA / point (`REWARD_PER_100_POINTS=50`) | `forge script script/Configure.s.sol --sig "rewards()" …` |
+| Reward | 1 NOVA / point (`REWARD_PER_100_POINTS=100`) | `forge script script/Configure.s.sol --sig "rewards()" …` |
 | Reward cap / cooldown | 3000 pts / 60 s | `MAX_POINTS_PER_MATCH`, `MATCH_COOLDOWN` (same `rewards()` command) |
 
-A goal is worth 100 match points, a save 50, a shot 20, a touch 2 — a decent rookie match pays ~100–200 NOVA, i.e. a
-paint after one match and a car after one or two.
+A goal is worth 100 match points, a save 50, a shot 20, a touch 2 — a first match typically pays 20–300 NOVA, so a
+judge can buy a paint right away and a car after a match or two. Tighten the rate later for a longer progression.
 
 Catalog: cars `viper`, `titan`; paints `graphite`, `obsidian`, `chrome`, `crimson`, `cobalt`, `toxic`, `solar`, `violet`,
 `rose` (STRIKER + ARCTIC are the free starter kit). New items: `NovaGarage.addItem(kind, key, name, color, price)`.

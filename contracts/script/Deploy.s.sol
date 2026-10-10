@@ -18,7 +18,7 @@ import {NovaToken} from "../src/NovaToken.sol";
 ///   RELAYER_ADDRESS         game server / gas relayer that records matches (default: anvil #1 locally, else deployer)
 ///   CAR_PRICE               NOVA per car body       (default 100)
 ///   PAINT_PRICE             NOVA per paint          (default 20)
-///   REWARD_PER_100_POINTS   NOVA minted per 100 match points (default 50, i.e. 0.5 NOVA / point)
+///   REWARD_PER_100_POINTS   NOVA minted per 100 match points (default 100, i.e. 1 NOVA / point)
 ///   MAX_POINTS_PER_MATCH    per-player cap per match (default 3000)
 ///   MATCH_COOLDOWN          seconds between rewarded matches per player (default 60)
 ///   RELAYER_TOPUP_MILLIETH  if > 0 and the relayer has less, send it this much ETH (in 0.001 ETH units)
@@ -39,7 +39,7 @@ contract Deploy is Script {
         address relayer = vm.envOr("RELAYER_ADDRESS", local ? ANVIL_ADDR_1 : deployer);
         uint128 carPrice = SafeCast.toUint128(vm.envOr("CAR_PRICE", uint256(100)) * 1e18);
         uint128 paintPrice = SafeCast.toUint128(vm.envOr("PAINT_PRICE", uint256(20)) * 1e18);
-        uint256 rewardPerPoint = vm.envOr("REWARD_PER_100_POINTS", uint256(50)) * 1e16;
+        uint256 rewardPerPoint = vm.envOr("REWARD_PER_100_POINTS", uint256(100)) * 1e16;
         uint32 maxPoints = SafeCast.toUint32(vm.envOr("MAX_POINTS_PER_MATCH", uint256(3000)));
         uint32 cooldown = SafeCast.toUint32(vm.envOr("MATCH_COOLDOWN", uint256(60)));
         uint256 topup = vm.envOr("RELAYER_TOPUP_MILLIETH", uint256(0)) * 1e15;

@@ -29,10 +29,6 @@ if [ "$NETWORK" != anvil ]; then
   DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
   BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$RPC" --ether)
   echo "Deployer $DEPLOYER has $BALANCE ETH on $NETWORK"
-  if [ -z "${RELAYER_ADDRESS:-}" ]; then
-    echo "note: RELAYER_ADDRESS is empty, so the deployer (admin of every contract) is also the relayer whose key sits"
-    echo "      on the web server. For anything beyond a demo, create a separate relayer key (see .env.example)."
-  fi
   if [ "$(echo "$BALANCE" | awk '{print ($1 < 0.0005)}')" = 1 ]; then
     echo "That is not enough for gas. Get Arbitrum Sepolia ETH from a faucet (see .env.example) and retry."
     exit 1
@@ -53,9 +49,8 @@ cat <<NEXT
 
 Deployed to $NETWORK (chain $CHAIN_ID). Addresses: deployments/$CHAIN_ID.json (also copied to the web app).
 
-Next — run the game with its relayer against this chain:
+Next — build the web app against this chain (it's a static site: deploy dist/ anywhere, e.g. Vercel):
   cd ../frontend
-  echo "RELAYER_PRIVATE_KEY=<the key of RELAYER_ADDRESS, or PRIVATE_KEY if you left it empty>" >> .env.local
-  npm run build && VITE_CHAIN_ID=$CHAIN_ID npm start         # serves dist/ + /api on :8787
+  VITE_CHAIN_ID=$CHAIN_ID npm run build
 Commit frontend/src/chain/deployments/$CHAIN_ID.json so production builds pick it up.
 NEXT

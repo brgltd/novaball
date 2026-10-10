@@ -7,14 +7,20 @@ import {NovaArena} from "../src/NovaArena.sol";
 import {BaseTest} from "./Base.t.sol";
 
 contract NovaArenaTest is BaseTest {
-    event RewardPaid(bytes32 indexed matchId, address indexed player, uint32 points, uint256 amount);
+    event MatchClaimed(
+        bytes32 indexed matchId,
+        address indexed player,
+        NovaArena.MatchResult result,
+        uint8 team,
+        uint32 points,
+        uint256 amount
+    );
 
-    function test_recordMatch_mintsProportionalReward() public {
-        vm.prank(server);
-        bytes32 id = arena.recordMatch(_result(1), _solo(alice, 312));
+    function test_claim_mintsProportionalReward() public {
+        bytes32 id = _claim(alice, 1, 312);
 
         assertEq(nova.balanceOf(alice), 156 ether); // 312 × 0.5
-        assertTrue(arena.recorded(id));
+        assertTrue(arena.claimed(id));
         assertEq(arena.matchCount(), 1);
         NovaArena.PlayerRecord memory r = arena.recordOf(alice);
         assertEq(r.matches, 1);
@@ -25,134 +31,106 @@ contract NovaArenaTest is BaseTest {
         assertEq(r.callsign, bytes16("ALICE"));
     }
 
-    function test_recordMatch_everyHumanPaidByTheirOwnPoints() public {
-        NovaArena.PlayerResult[] memory ps = new NovaArena.PlayerResult[](2);
-        ps[0] = NovaArena.PlayerResult({player: alice, team: 0, points: 400, callsign: bytes16("ALICE")});
-        ps[1] = NovaArena.PlayerResult({player: bob, team: 1, points: 100, callsign: bytes16("BOB")});
-        vm.prank(server);
-        arena.recordMatch(_result(2), ps);
-        assertEq(nova.balanceOf(alice), 200 ether);
-        assertEq(nova.balanceOf(bob), 50 ether);
-        assertEq(arena.recordOf(alice).wins, 1);
-        assertEq(arena.recordOf(bob).wins, 0, "BLAZE lost");
-    }
-
-    function test_recordMatch_drawCountsNoWin() public {
-        NovaArena.MatchResult memory m = _result(3);
-        m.winner = -1;
-        vm.prank(server);
-        arena.recordMatch(m, _solo(alice, 10));
-        assertEq(arena.recordOf(alice).wins, 0);
-    }
-
-    function test_recordMatch_onlyGameServer() public {
-        bytes32 role = arena.GAME_SERVER_ROLE();
-        NovaArena.MatchResult memory m = _result(1);
-        NovaArena.PlayerResult[] memory ps = _solo(alice, 10);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, alice, role));
+    function test_claim_emitsTheMatch() public {
+        NovaArena.MatchResult memory m = _result(42);
+        bytes32 id = keccak256(abi.encode(alice, m));
+        vm.expectEmit(address(arena));
+        emit MatchClaimed(id, alice, m, 0, 10, 5 ether);
         vm.prank(alice);
-        arena.recordMatch(m, ps);
+        assertEq(arena.claim(m, 0, 10, bytes16("ALICE")), id);
     }
 
-    function test_recordMatch_rejectsDuplicates() public {
-        vm.prank(server);
-        bytes32 id = arena.recordMatch(_result(1), _solo(alice, 10));
+    function test_claim_lossAndDrawCountNoWin() public {
+        vm.prank(alice);
+        arena.claim(_result(1), 1, 10, bytes16("ALICE")); // VOLT won, alice was BLAZE
+        NovaArena.MatchResult memory m = _result(2);
+        m.winner = -1;
+        vm.prank(bob);
+        arena.claim(m, 0, 10, bytes16("BOB"));
+        assertEq(arena.recordOf(alice).wins, 0);
+        assertEq(arena.recordOf(bob).wins, 0);
+    }
+
+    function test_claim_rejectsDuplicates() public {
+        bytes32 id = _claim(alice, 1, 10);
         vm.warp(block.timestamp + COOLDOWN);
-        vm.expectRevert(abi.encodeWithSelector(NovaArena.AlreadyRecorded.selector, id));
-        vm.prank(server);
-        arena.recordMatch(_result(1), _solo(alice, 10));
+        NovaArena.MatchResult memory m = _result(1);
+        vm.expectRevert(abi.encodeWithSelector(NovaArena.AlreadyClaimed.selector, id));
+        vm.prank(alice);
+        arena.claim(m, 0, 999, bytes16(0)); // other points, same match
     }
 
-    function test_recordMatch_capsPoints() public {
+    function test_claim_sameMatchByAnotherPlayerIsTheirs() public {
+        _claim(alice, 1, 10);
+        _claim(bob, 1, 10);
+        assertEq(nova.balanceOf(bob), 5 ether);
+    }
+
+    function test_claim_capsPoints() public {
         NovaArena.MatchResult memory m = _result(1);
-        NovaArena.PlayerResult[] memory ps = _solo(alice, MAX_POINTS + 1);
-        vm.expectRevert(abi.encodeWithSelector(NovaArena.PointsAboveCap.selector, alice, MAX_POINTS + 1, MAX_POINTS));
-        vm.prank(server);
-        arena.recordMatch(m, ps);
-        vm.prank(server);
-        arena.recordMatch(m, _solo(alice, MAX_POINTS));
+        vm.expectRevert(abi.encodeWithSelector(NovaArena.PointsAboveCap.selector, MAX_POINTS + 1, MAX_POINTS));
+        vm.prank(alice);
+        arena.claim(m, 0, MAX_POINTS + 1, bytes16(0));
+        _claim(alice, 1, MAX_POINTS);
         assertEq(nova.balanceOf(alice), uint256(MAX_POINTS) * REWARD_PER_POINT);
     }
 
-    function test_recordMatch_cooldown() public {
-        vm.prank(server);
-        arena.recordMatch(_result(1), _solo(alice, 10));
+    function test_claim_cooldown() public {
+        _claim(alice, 1, 10);
         uint256 ready = block.timestamp + COOLDOWN;
         assertEq(arena.readyAt(alice), ready);
 
         vm.warp(ready - 1);
         NovaArena.MatchResult memory m = _result(2);
-        NovaArena.PlayerResult[] memory ps = _solo(alice, 10);
-        vm.expectRevert(abi.encodeWithSelector(NovaArena.CooldownActive.selector, alice, ready));
-        vm.prank(server);
-        arena.recordMatch(m, ps);
+        vm.expectRevert(abi.encodeWithSelector(NovaArena.CooldownActive.selector, ready));
+        vm.prank(alice);
+        arena.claim(m, 0, 10, bytes16(0));
+        _claim(bob, 2, 10); // other players are not affected
 
         vm.warp(ready);
         assertEq(arena.readyAt(alice), 0);
-        vm.prank(server);
-        arena.recordMatch(m, ps);
+        _claim(alice, 2, 10);
         assertEq(arena.recordOf(alice).matches, 2);
     }
 
-    function test_recordMatch_validatesPlayers() public {
-        vm.startPrank(server);
-        vm.expectRevert(NovaArena.NoPlayers.selector);
-        arena.recordMatch(_result(1), new NovaArena.PlayerResult[](0));
-        vm.expectRevert(NovaArena.TooManyPlayers.selector);
-        arena.recordMatch(_result(1), new NovaArena.PlayerResult[](7));
-        vm.expectRevert(NovaArena.ZeroAddress.selector);
-        arena.recordMatch(_result(1), _solo(address(0), 1));
-        vm.stopPrank();
-    }
-
-    function test_recordMatch_rejectsInvalidTeam() public {
+    function test_claim_rejectsInvalidTeam() public {
         // team 255 would read as int8(-1) and count as a "win" on a draw
         NovaArena.MatchResult memory m = _result(1);
         m.winner = -1;
-        NovaArena.PlayerResult[] memory ps = _solo(alice, 10);
-        ps[0].team = 255;
         vm.expectRevert(abi.encodeWithSelector(NovaArena.InvalidTeam.selector, 255));
-        vm.prank(server);
-        arena.recordMatch(m, ps);
+        vm.prank(alice);
+        arena.claim(m, 255, 10, bytes16(0));
     }
 
-    function test_recordMatch_emptyCallsignKeepsStoredOne() public {
-        vm.prank(server);
-        arena.recordMatch(_result(1), _solo(alice, 10));
-        NovaArena.PlayerResult[] memory ps = _solo(alice, 10);
-        ps[0].callsign = bytes16(0);
+    function test_claim_emptyCallsignKeepsStoredOne() public {
+        _claim(alice, 1, 10);
         vm.warp(block.timestamp + COOLDOWN);
-        vm.prank(server);
-        arena.recordMatch(_result(2), ps);
+        vm.prank(alice);
+        arena.claim(_result(2), 0, 10, bytes16(0));
         assertEq(arena.recordOf(alice).callsign, bytes16("ALICE"));
     }
 
     function test_zeroPointsStillRecorded() public {
-        vm.expectEmit(false, true, false, true, address(arena));
-        emit RewardPaid(bytes32(0), alice, 0, 0);
-        vm.prank(server);
-        arena.recordMatch(_result(1), _solo(alice, 0));
+        _claim(alice, 1, 0);
         assertEq(arena.recordOf(alice).matches, 1);
         assertEq(nova.balanceOf(alice), 0);
     }
 
     function test_leaderboardPaging() public {
-        address[5] memory who = [alice, bob, stranger, relayer, admin];
+        address[5] memory who = [alice, bob, carol, stranger, admin];
         for (uint256 i; i < who.length; ++i) {
-            vm.prank(server);
-            arena.recordMatch(_result(uint64(100 + i)), _solo(who[i], uint32(10 * (i + 1))));
+            _claim(who[i], uint64(100 + i), uint32(10 * (i + 1)));
         }
         assertEq(arena.playerCount(), 5);
         (address[] memory a, NovaArena.PlayerRecord[] memory r) = arena.getPlayers(3, 10);
         assertEq(a.length, 2);
-        assertEq(a[0], relayer);
+        assertEq(a[0], stranger);
         assertEq(r[1].points, 50);
         (a,) = arena.getPlayers(9, 10);
         assertEq(a.length, 0);
         // a returning player is not listed twice
         vm.warp(block.timestamp + COOLDOWN);
-        vm.prank(server);
-        arena.recordMatch(_result(999), _solo(alice, 1));
+        _claim(alice, 999, 1);
         assertEq(arena.playerCount(), 5);
     }
 
@@ -166,35 +144,28 @@ contract NovaArenaTest is BaseTest {
         assertEq(arena.previewReward(400), 100 ether, "preview is capped");
 
         bytes32 role = arena.DEFAULT_ADMIN_ROLE();
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, server, role));
-        vm.prank(server);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, alice, role));
+        vm.prank(alice);
         arena.setRewardConfig(0, 0, 0);
     }
 
     function test_earnThenBuy_endToEnd() public {
-        // one good match pays for a car
-        vm.prank(server);
-        arena.recordMatch(_result(7), _solo(alice, 240));
+        // one good match pays for a car: claim, then buy, two transactions and no approve
+        _claim(alice, 7, 240);
         assertEq(nova.balanceOf(alice), 120 ether);
 
-        uint256 deadline = block.timestamp + 10 minutes;
-        bytes memory sig = _signPurchase(alicePk, viperId, CAR_PRICE, deadline);
-        vm.prank(relayer);
-        garage.buyForWithPermit(
-            alice, viperId, CAR_PRICE, deadline, sig, _signPermit(alicePk, address(garage), CAR_PRICE, deadline)
-        );
+        vm.prank(alice);
+        garage.buy(viperId, CAR_PRICE);
 
         assertEq(garage.balanceOf(alice, viperId), 1);
         assertEq(nova.balanceOf(alice), 20 ether);
-        assertEq(alice.balance, 0, "the player never needed gas");
     }
 
     function testFuzz_reward(uint32 points, uint64 rate) public {
         points = uint32(bound(points, 0, MAX_POINTS));
         vm.prank(admin);
         arena.setRewardConfig(rate, MAX_POINTS, COOLDOWN);
-        vm.prank(server);
-        arena.recordMatch(_result(1), _solo(alice, points));
+        _claim(alice, 1, points);
         assertEq(nova.balanceOf(alice), uint256(points) * rate);
         assertEq(arena.recordOf(alice).earned, uint256(points) * rate);
     }

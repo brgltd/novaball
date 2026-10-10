@@ -7,15 +7,14 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {NovaToken} from "./NovaToken.sol";
 
 /// @title NOVABALL Arena — match results and NOVA rewards
-/// @notice The game server records each finished match: its seed and the deterministic simulation's final state hash
-///         (anyone holding the input log can re-simulate and check it), the final score, and every human player's
-///         match points. Each player is minted `points × rewardPerPoint` NOVA and gets a career record (leaderboard).
-/// @dev Matches are simulated client-side, so the contract bounds what a single report can mint: points per player
-///      are capped and a player can be rewarded at most once per `matchCooldown` (a real match lasts ≥ 2 minutes).
+/// @notice After a match, the player claims its reward: the match's seed and the deterministic simulation's final
+///         state hash (anyone holding the input log can re-simulate and check it), the final score and the player's
+///         match points go on-chain, the player is minted `points × rewardPerPoint` NOVA and its career record
+///         (leaderboard) is updated. The player sends the transaction and pays its gas.
+/// @dev Matches are simulated client-side, so the contract bounds what a single claim can mint: points are capped,
+///      a match can be claimed once, and a player can claim at most once per `matchCooldown` (a real match lasts
+///      ≥ 2 minutes).
 contract NovaArena is AccessControl {
-    bytes32 public constant GAME_SERVER_ROLE = keccak256("GAME_SERVER_ROLE");
-    uint256 public constant MAX_PLAYERS = 6;
-
     struct MatchResult {
         uint64 seed;
         uint32 stateHash;
@@ -28,14 +27,6 @@ contract NovaArena is AccessControl {
         /// @dev 0 VOLT, 1 BLAZE, -1 draw
         int8 winner;
         bool overtime;
-    }
-
-    struct PlayerResult {
-        address player;
-        uint8 team;
-        uint32 points;
-        /// @dev Pilot callsign, ASCII, left-aligned and zero-padded (0 keeps the stored one).
-        bytes16 callsign;
     }
 
     struct PlayerRecord {
@@ -55,31 +46,19 @@ contract NovaArena is AccessControl {
     uint32 public matchCooldown;
 
     uint256 public matchCount;
-    mapping(bytes32 matchId => bool) public recorded;
+    mapping(bytes32 matchId => bool) public claimed;
     mapping(address player => PlayerRecord) private _records;
     address[] private _players;
 
-    event MatchRecorded(
-        bytes32 indexed matchId,
-        uint64 seed,
-        uint32 stateHash,
-        uint8 teamSize,
-        uint8 difficulty,
-        uint16 durationSec,
-        uint16 scoreVolt,
-        uint16 scoreBlaze,
-        int8 winner
+    event MatchClaimed(
+        bytes32 indexed matchId, address indexed player, MatchResult result, uint8 team, uint32 points, uint256 amount
     );
-    event RewardPaid(bytes32 indexed matchId, address indexed player, uint32 points, uint256 amount);
     event RewardConfigUpdated(uint256 rewardPerPoint, uint32 maxPointsPerMatch, uint32 matchCooldown);
 
-    error NoPlayers();
-    error TooManyPlayers();
-    error ZeroAddress();
     error InvalidTeam(uint8 team);
-    error AlreadyRecorded(bytes32 matchId);
-    error PointsAboveCap(address player, uint32 points, uint32 cap);
-    error CooldownActive(address player, uint256 readyAt);
+    error AlreadyClaimed(bytes32 matchId);
+    error PointsAboveCap(uint32 points, uint32 cap);
+    error CooldownActive(uint256 readyAt);
 
     constructor(
         NovaToken nova_,
@@ -93,33 +72,43 @@ contract NovaArena is AccessControl {
         _setRewardConfig(rewardPerPoint_, maxPointsPerMatch_, matchCooldown_);
     }
 
-    // ------------------------------------------------------------------ game server
+    // ------------------------------------------------------------------ players
 
-    function recordMatch(MatchResult calldata result, PlayerResult[] calldata players)
+    /// @notice Record a finished match and mint your reward.
+    /// @param team Your team (0 VOLT, 1 BLAZE).
+    /// @param points Your match points (scoreboard score).
+    /// @param callsign Your pilot callsign, ASCII, left-aligned and zero-padded (0 keeps the stored one).
+    function claim(MatchResult calldata result, uint8 team, uint32 points, bytes16 callsign)
         external
-        onlyRole(GAME_SERVER_ROLE)
         returns (bytes32 matchId)
     {
-        if (players.length == 0) revert NoPlayers();
-        if (players.length > MAX_PLAYERS) revert TooManyPlayers();
-        matchId = keccak256(abi.encode(result, players));
-        if (recorded[matchId]) revert AlreadyRecorded(matchId);
-        recorded[matchId] = true;
-        ++matchCount;
-        emit MatchRecorded(
-            matchId,
-            result.seed,
-            result.stateHash,
-            result.teamSize,
-            result.difficulty,
-            result.durationSec,
-            result.scoreVolt,
-            result.scoreBlaze,
-            result.winner
-        );
-        for (uint256 i; i < players.length; ++i) {
-            _reward(matchId, result.winner, players[i]);
+        if (team > 1) revert InvalidTeam(team);
+        if (points > maxPointsPerMatch) revert PointsAboveCap(points, maxPointsPerMatch);
+        matchId = keccak256(abi.encode(msg.sender, result));
+        if (claimed[matchId]) revert AlreadyClaimed(matchId);
+        PlayerRecord storage r = _records[msg.sender];
+        if (r.matches == 0) {
+            _players.push(msg.sender);
+        } else {
+            uint256 ready = readyAt(msg.sender);
+            if (ready != 0) revert CooldownActive(ready);
         }
+        claimed[matchId] = true;
+        ++matchCount;
+
+        uint256 amount = uint256(points) * rewardPerPoint;
+        unchecked {
+            ++r.matches;
+            // casting to 'int8' is safe because team is 0 or 1 (checked above)
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (int8(team) == result.winner) ++r.wins;
+            r.points += points;
+        }
+        r.earned += SafeCast.toUint128(amount);
+        r.lastMatchAt = uint64(block.timestamp);
+        if (callsign != bytes16(0)) r.callsign = callsign;
+        if (amount != 0) nova.mint(msg.sender, amount);
+        emit MatchClaimed(matchId, msg.sender, result, team, points, amount);
     }
 
     // ------------------------------------------------------------------ admin
@@ -141,7 +130,7 @@ contract NovaArena is AccessControl {
         return uint256(points > maxPointsPerMatch ? maxPointsPerMatch : points) * rewardPerPoint;
     }
 
-    /// @notice When `player` can be rewarded again (0 = now).
+    /// @notice When `player` can claim again (0 = now).
     function readyAt(address player) public view returns (uint256) {
         PlayerRecord storage r = _records[player];
         if (r.matches == 0) return 0;
@@ -171,30 +160,6 @@ contract NovaArena is AccessControl {
     }
 
     // ------------------------------------------------------------------ internals
-
-    function _reward(bytes32 matchId, int8 winner, PlayerResult calldata p) private {
-        if (p.player == address(0)) revert ZeroAddress();
-        if (p.team > 1) revert InvalidTeam(p.team);
-        if (p.points > maxPointsPerMatch) revert PointsAboveCap(p.player, p.points, maxPointsPerMatch);
-        PlayerRecord storage r = _records[p.player];
-        if (r.matches == 0) {
-            _players.push(p.player);
-        } else {
-            uint256 ready = readyAt(p.player);
-            if (ready != 0) revert CooldownActive(p.player, ready);
-        }
-        uint256 amount = uint256(p.points) * rewardPerPoint;
-        unchecked {
-            ++r.matches;
-            if (int8(p.team) == winner) ++r.wins;
-            r.points += p.points;
-        }
-        r.earned += SafeCast.toUint128(amount);
-        r.lastMatchAt = uint64(block.timestamp);
-        if (p.callsign != bytes16(0)) r.callsign = p.callsign;
-        if (amount != 0) nova.mint(p.player, amount);
-        emit RewardPaid(matchId, p.player, p.points, amount);
-    }
 
     function _setRewardConfig(uint256 rewardPerPoint_, uint32 maxPointsPerMatch_, uint32 matchCooldown_) private {
         rewardPerPoint = rewardPerPoint_;

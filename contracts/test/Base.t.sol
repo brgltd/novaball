@@ -14,13 +14,11 @@ abstract contract BaseTest is Test {
     NovaArena internal arena;
 
     address internal admin = makeAddr("admin");
-    address internal server = makeAddr("server");
-    address internal relayer = makeAddr("relayer");
     address internal stranger = makeAddr("stranger");
     uint256 internal alicePk = 0xA11CE;
     address internal alice = vm.addr(alicePk);
-    uint256 internal bobPk = 0xB0B;
-    address internal bob = vm.addr(bobPk);
+    address internal bob = makeAddr("bob");
+    address internal carol = makeAddr("carol");
 
     uint256 internal constant REWARD_PER_POINT = 0.5 ether;
     uint32 internal constant MAX_POINTS = 3000;
@@ -39,7 +37,7 @@ abstract contract BaseTest is Test {
         arena = new NovaArena(nova, admin, REWARD_PER_POINT, MAX_POINTS, COOLDOWN);
         vm.startPrank(admin);
         nova.grantRole(nova.MINTER_ROLE(), address(arena));
-        arena.grantRole(arena.GAME_SERVER_ROLE(), server);
+        nova.grantRole(nova.SPENDER_ROLE(), address(garage));
         viperId = garage.addItem(NovaGarage.Kind.Car, "viper", "VIPER", 0xb9c3cf, CAR_PRICE);
         titanId = garage.addItem(NovaGarage.Kind.Car, "titan", "TITAN", 0xb9c3cf, CAR_PRICE);
         crimsonId = garage.addItem(NovaGarage.Kind.Paint, "crimson", "CRIMSON", 0xb3122e, PAINT_PRICE);
@@ -69,26 +67,16 @@ abstract contract BaseTest is Test {
         });
     }
 
-    function _solo(address player, uint32 points) internal pure returns (NovaArena.PlayerResult[] memory ps) {
-        ps = new NovaArena.PlayerResult[](1);
-        ps[0] = NovaArena.PlayerResult({player: player, team: 0, points: points, callsign: bytes16("ALICE")});
-    }
-
-    function _signPurchase(uint256 pk, uint256 id, uint256 maxPrice, uint256 deadline)
-        internal
-        view
-        returns (bytes memory)
-    {
-        address buyer = vm.addr(pk);
-        bytes32 digest = garage.purchaseDigest(buyer, id, maxPrice, garage.nonces(buyer), deadline);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
-        return abi.encodePacked(r, s, v);
+    /// `player` claims a 2v2 win on team VOLT.
+    function _claim(address player, uint64 seed, uint32 points) internal returns (bytes32) {
+        vm.prank(player);
+        return arena.claim(_result(seed), 0, points, bytes16("ALICE"));
     }
 
     function _signPermit(uint256 pk, address spender, uint256 value, uint256 deadline)
         internal
         view
-        returns (NovaGarage.PermitSig memory)
+        returns (uint8 v, bytes32 r, bytes32 s)
     {
         address owner = vm.addr(pk);
         bytes32 structHash = keccak256(
@@ -101,8 +89,6 @@ abstract contract BaseTest is Test {
                 deadline
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", nova.DOMAIN_SEPARATOR(), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
-        return NovaGarage.PermitSig({value: value, deadline: deadline, v: v, r: r, s: s});
+        (v, r, s) = vm.sign(pk, keccak256(abi.encodePacked("\x19\x01", nova.DOMAIN_SEPARATOR(), structHash)));
     }
 }

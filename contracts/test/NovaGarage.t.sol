@@ -89,7 +89,6 @@ contract NovaGarageTest is BaseTest {
     function test_buy_burnsAndMints() public {
         _mintNova(alice, 150 ether);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         vm.expectEmit(address(garage));
         emit ItemPurchased(alice, viperId, CAR_PRICE);
         garage.buy(viperId, CAR_PRICE);
@@ -107,7 +106,6 @@ contract NovaGarageTest is BaseTest {
     function test_buy_revertsWhenAlreadyOwned() public {
         _mintNova(alice, 300 ether);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         garage.buy(viperId, CAR_PRICE);
         vm.expectRevert(abi.encodeWithSelector(NovaGarage.AlreadyOwned.selector, alice, viperId));
         garage.buy(viperId, CAR_PRICE);
@@ -119,7 +117,6 @@ contract NovaGarageTest is BaseTest {
         garage.setListed(titanId, false);
         _mintNova(alice, 300 ether);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(NovaGarage.NotListed.selector, titanId));
         garage.buy(titanId, CAR_PRICE);
         vm.stopPrank();
@@ -130,7 +127,6 @@ contract NovaGarageTest is BaseTest {
         garage.setPrice(viperId, 120 ether);
         _mintNova(alice, 300 ether);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(NovaGarage.PriceAboveMax.selector, 120 ether, CAR_PRICE));
         garage.buy(viperId, CAR_PRICE);
         vm.stopPrank();
@@ -139,7 +135,6 @@ contract NovaGarageTest is BaseTest {
     function test_buy_revertsWithoutFunds() public {
         _mintNova(alice, 10 ether);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         vm.expectRevert(
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 10 ether, PAINT_PRICE)
         );
@@ -147,13 +142,21 @@ contract NovaGarageTest is BaseTest {
         vm.stopPrank();
     }
 
-    function test_buy_revertsWithoutAllowance() public {
+    function test_buy_needsNoApproval() public {
         _mintNova(alice, 100 ether);
-        vm.expectRevert(
-            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(garage), 0, PAINT_PRICE)
-        );
+        assertEq(nova.allowance(alice, address(garage)), 0);
         vm.prank(alice);
         garage.buy(crimsonId, PAINT_PRICE);
+        assertEq(garage.balanceOf(alice, crimsonId), 1);
+        assertEq(nova.balanceOf(alice), 80 ether);
+    }
+
+    function test_buy_onlySpendsTheSendersNova() public {
+        _mintNova(alice, 100 ether);
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, bob, 0, PAINT_PRICE));
+        vm.prank(bob);
+        garage.buy(crimsonId, PAINT_PRICE);
+        assertEq(nova.balanceOf(alice), 100 ether);
     }
 
     function test_buy_freeItemNeedsNoNova() public {
@@ -162,99 +165,6 @@ contract NovaGarageTest is BaseTest {
         vm.prank(bob);
         garage.buy(crimsonId, 0);
         assertEq(garage.balanceOf(bob, crimsonId), 1);
-    }
-
-    // ------------------------------------------------------------------ gasless buy (relayer)
-
-    function test_buyFor_withSignature() public {
-        _mintNova(alice, 100 ether);
-        vm.prank(alice);
-        nova.approve(address(garage), type(uint256).max);
-
-        uint256 deadline = block.timestamp + 10 minutes;
-        bytes memory sig = _signPurchase(alicePk, crimsonId, PAINT_PRICE, deadline);
-        vm.prank(relayer);
-        garage.buyFor(alice, crimsonId, PAINT_PRICE, deadline, sig);
-
-        assertEq(garage.balanceOf(alice, crimsonId), 1);
-        assertEq(garage.balanceOf(relayer, crimsonId), 0);
-        assertEq(nova.balanceOf(alice), 80 ether);
-        assertEq(garage.nonces(alice), 1);
-    }
-
-    function test_buyFor_signatureCannotBeReplayed() public {
-        _mintNova(alice, 500 ether);
-        vm.prank(alice);
-        nova.approve(address(garage), type(uint256).max);
-        uint256 deadline = block.timestamp + 10 minutes;
-        bytes memory sig = _signPurchase(alicePk, viperId, CAR_PRICE, deadline);
-        vm.prank(relayer);
-        garage.buyFor(alice, viperId, CAR_PRICE, deadline, sig);
-        // nonce moved on: the same signature no longer matches
-        vm.expectRevert(NovaGarage.InvalidSignature.selector);
-        vm.prank(relayer);
-        garage.buyFor(alice, viperId, CAR_PRICE, deadline, sig);
-    }
-
-    function test_buyFor_signatureBindsItemAndPrice() public {
-        _mintNova(alice, 500 ether);
-        vm.prank(alice);
-        nova.approve(address(garage), type(uint256).max);
-        uint256 deadline = block.timestamp + 10 minutes;
-        bytes memory sig = _signPurchase(alicePk, viperId, CAR_PRICE, deadline);
-
-        vm.startPrank(relayer);
-        vm.expectRevert(NovaGarage.InvalidSignature.selector);
-        garage.buyFor(alice, titanId, CAR_PRICE, deadline, sig); // other item
-        vm.expectRevert(NovaGarage.InvalidSignature.selector);
-        garage.buyFor(alice, viperId, CAR_PRICE + 1, deadline, sig); // other max price
-        vm.expectRevert(NovaGarage.InvalidSignature.selector);
-        garage.buyFor(bob, viperId, CAR_PRICE, deadline, sig); // other buyer
-        vm.stopPrank();
-    }
-
-    function test_buyFor_rejectsExpired() public {
-        uint256 deadline = block.timestamp + 1;
-        bytes memory sig = _signPurchase(alicePk, crimsonId, PAINT_PRICE, deadline);
-        vm.warp(deadline + 1);
-        vm.expectRevert(abi.encodeWithSelector(NovaGarage.SignatureExpired.selector, deadline));
-        garage.buyFor(alice, crimsonId, PAINT_PRICE, deadline, sig);
-    }
-
-    function test_buyFor_rejectsForeignSigner() public {
-        uint256 deadline = block.timestamp + 10 minutes;
-        bytes32 digest = garage.purchaseDigest(alice, crimsonId, PAINT_PRICE, 0, deadline);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPk, digest);
-        vm.expectRevert(NovaGarage.InvalidSignature.selector);
-        garage.buyFor(alice, crimsonId, PAINT_PRICE, deadline, abi.encodePacked(r, s, v));
-    }
-
-    function test_buyForWithPermit_freshWalletNoApproveTx() public {
-        _mintNova(alice, 120 ether);
-        uint256 deadline = block.timestamp + 10 minutes;
-        NovaGarage.PermitSig memory permit = _signPermit(alicePk, address(garage), CAR_PRICE, deadline);
-        bytes memory sig = _signPurchase(alicePk, viperId, CAR_PRICE, deadline);
-
-        vm.prank(relayer);
-        garage.buyForWithPermit(alice, viperId, CAR_PRICE, deadline, sig, permit);
-
-        assertEq(garage.balanceOf(alice, viperId), 1);
-        assertEq(nova.balanceOf(alice), 20 ether);
-        assertEq(nova.allowance(alice, address(garage)), 0);
-    }
-
-    function test_buyForWithPermit_survivesFrontRunPermit() public {
-        _mintNova(alice, 120 ether);
-        uint256 deadline = block.timestamp + 10 minutes;
-        NovaGarage.PermitSig memory permit = _signPermit(alicePk, address(garage), CAR_PRICE, deadline);
-        bytes memory sig = _signPurchase(alicePk, viperId, CAR_PRICE, deadline);
-        // someone burns the permit first
-        vm.prank(stranger);
-        nova.permit(alice, address(garage), permit.value, permit.deadline, permit.v, permit.r, permit.s);
-
-        vm.prank(relayer);
-        garage.buyForWithPermit(alice, viperId, CAR_PRICE, deadline, sig, permit);
-        assertEq(garage.balanceOf(alice, viperId), 1);
     }
 
     // ------------------------------------------------------------------ metadata
@@ -292,7 +202,6 @@ contract NovaGarageTest is BaseTest {
         garage.setPrice(titanId, price);
         _mintNova(alice, uint256(price) + extra);
         vm.startPrank(alice);
-        nova.approve(address(garage), type(uint256).max);
         garage.buy(titanId, price);
         vm.stopPrank();
         assertEq(nova.balanceOf(alice), extra);

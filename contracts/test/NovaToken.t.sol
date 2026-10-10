@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-import {NovaGarage} from "../src/NovaGarage.sol";
 import {BaseTest} from "./Base.t.sol";
 
 contract NovaTokenTest is BaseTest {
@@ -29,9 +28,9 @@ contract NovaTokenTest is BaseTest {
 
     function test_permit_setsAllowance() public {
         uint256 deadline = block.timestamp + 1 hours;
-        NovaGarage.PermitSig memory p = _signPermit(alicePk, bob, 7 ether, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = _signPermit(alicePk, bob, 7 ether, deadline);
         vm.prank(stranger); // anyone can submit a permit
-        nova.permit(alice, bob, 7 ether, deadline, p.v, p.r, p.s);
+        nova.permit(alice, bob, 7 ether, deadline, v, r, s);
         assertEq(nova.allowance(alice, bob), 7 ether);
         assertEq(nova.nonces(alice), 1);
     }
@@ -40,6 +39,21 @@ contract NovaTokenTest is BaseTest {
         _mintNova(alice, 10 ether);
         vm.prank(alice);
         nova.burn(4 ether);
+        assertEq(nova.balanceOf(alice), 6 ether);
+        assertEq(nova.totalSupply(), 6 ether);
+    }
+
+    function test_spend_onlySpender() public {
+        _mintNova(alice, 10 ether);
+        bytes32 role = nova.SPENDER_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role)
+        );
+        vm.prank(stranger);
+        nova.spend(alice, 1 ether);
+
+        vm.prank(address(garage));
+        nova.spend(alice, 4 ether);
         assertEq(nova.balanceOf(alice), 6 ether);
         assertEq(nova.totalSupply(), 6 ether);
     }

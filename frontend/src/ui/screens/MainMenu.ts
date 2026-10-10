@@ -34,7 +34,7 @@ export class MainMenu extends Panel {
     super();
     const entries: MenuEntry[] = [
       { id: 'play', label: 'PLAY', desc: 'Exhibition vs AI · 1v1 · 2v2 · 3v3', icon: 'play', primary: true, action: actions.play },
-      { id: 'free', label: 'FREE PLAY', desc: 'Just you, the Nova Core and an empty arena', icon: 'freePlay', action: actions.freePlay },
+      // { id: 'free', label: 'FREE PLAY', desc: 'Just you, the Nova Core and an empty arena', icon: 'freePlay', action: actions.freePlay },
       { id: 'garage', label: 'GARAGE', desc: chain.state.enabled ? 'Cars & paints · unlock NFTs with NOVA' : 'Callsign, body style and paint', icon: 'garage', action: () => ctx.open('garage') },
       ...(chain.state.enabled
         ? [
@@ -52,7 +52,7 @@ export class MainMenu extends Panel {
         'button',
         { class: `nb-mm-item${e.primary ? ' is-primary' : ''}`, type: 'button', 'data-nav': '', 'data-nav-group': 'menu', 'data-id': e.id },
         span('nb-mm-glow'),
-        span('nb-mm-idx', String(i + 1).padStart(2, '0')),
+        // span('nb-mm-idx', String(i + 1).padStart(2, '0')),
         h('span', { class: 'nb-mm-ico' }, frag(ICONS[e.icon])),
         span('nb-mm-label', e.label),
         span('nb-mm-desc', e.desc),

@@ -189,7 +189,7 @@ export class Garage extends Panel {
         'div',
         { class: 'nb-gar-note' },
         onChain
-          ? `STRIKER and ARCTIC are free. Every other body and paint is an ERC-1155 NFT on ${NETWORK_LABEL.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, bought with NOVA you claim from your matches. The NOVA is burned; your wallet pays a tiny gas fee.`
+          ? `STRIKER in the ARCTIC color is free. Every other body and paint is an ERC-1155 NFT on ${NETWORK_LABEL.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, bought with NOVA you claim from your matches. The NOVA is burned; your wallet pays a tiny gas fee.`
           : 'Trims, hover pads and thrusters always glow in your team color.',
       ),
     );

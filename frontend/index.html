@@ -3,14 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NOVABALL</title>
-    <meta name="description" content="NOVABALL — hover-car football at the edge of the galaxy. A procedural car-soccer arena in your browser: charge the Nova Core, fire NOVA PULSE shockwaves and fly through ZERO-G SURGES against AI rivals." />
+    <title>NOVABALL — Hover-Car Football Browser Game on Arbitrum</title>
+    <meta name="description" content="Play NOVABALL free in your browser: 3D hover-car football vs AI bots in a zero-G space arena. Earn NOVA tokens and collect NFT cars on Arbitrum. No sign-up." />
+    <meta name="keywords" content="NOVABALL, car soccer, hover-car football, browser game, free online game, WebGL game, 3D sports game, play to earn, NFT game, Arbitrum, web3 game, blockchain game" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="application-name" content="NOVABALL" />
+    <meta name="apple-mobile-web-app-title" content="NOVABALL" />
     <meta name="theme-color" content="#05070d" />
+    <meta name="color-scheme" content="dark" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NOVABALL" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="NOVABALL — hover-car football at the edge of the galaxy" />
-    <meta property="og:description" content="Charge the Nova Core, fire NOVA PULSE shockwaves and fly through ZERO-G SURGES in a holographic stadium above a ringed gas giant. Plays in the browser, vs AI bots." />
-    <meta name="twitter:card" content="summary" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0' stop-color='%23fff'/%3E%3Cstop offset='.45' stop-color='%238be9ff'/%3E%3Cstop offset='1' stop-color='%231ec8ff' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23g)'/%3E%3C/svg%3E" />
+    <meta property="og:description" content="Play a match in your browser, claim your points as NOVA tokens and spend them on NFT cars &amp; paints — all on-chain on Arbitrum. Free, no sign-up." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NOVABALL — hover-car football at the edge of the galaxy" />
+    <meta name="twitter:description" content="Play a match in your browser, claim your points as NOVA tokens and spend them on NFT cars &amp; paints — all on-chain on Arbitrum." />
+    <!-- canonical, og:url, og:image, twitter:image and the JSON-LD structured data are added at build time (vite.seo.ts) -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <style>
       html, body { margin: 0; height: 100%; background: #02040a; overflow: hidden; }
       #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
@@ -117,6 +130,19 @@
       }
       .nb-boot-msg b { font-size: clamp(24px, 4.5vw, 44px); font-weight: 900; letter-spacing: 0.1em; color: #8be9ff; text-shadow: 0 0 24px #1ec8ff; }
       .nb-boot-msg span { max-width: 640px; opacity: 0.85; }
+      /* The page's text description (#nb-about): read by screen readers and search engines, not drawn over the game. */
+      .nb-sr {
+        position: absolute !important;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+      }
     </style>
     <script>
       // Boot watchdog (classic script, runs before the game bundle). If the bundle fails to load or to evaluate —
@@ -158,7 +184,7 @@
     </script>
   </head>
   <body>
-    <canvas id="game" tabindex="0"></canvas>
+    <canvas id="game" tabindex="0" aria-label="NOVABALL game view"></canvas>
     <div id="nb-splash" aria-hidden="true">
       <div class="nb-sp-horizon"></div>
       <div class="nb-sp-center">
@@ -171,6 +197,44 @@
     <noscript>
       <div class="nb-boot-msg"><b>NOVABALL</b><span>NOVABALL is a real-time 3D game: please enable JavaScript to play.</span></div>
     </noscript>
+    <main id="nb-about" class="nb-sr">
+      <h1>NOVABALL — hover-car football at the edge of the galaxy</h1>
+      <p>
+        NOVABALL is a free 3D car-soccer game that runs in your web browser. Drive a mag-lev hover car, boost, jump,
+        dodge-flip and ride the force-field walls to strike the glowing Nova Core into the rival goal, in a holographic
+        stadium floating above a ringed gas giant. No download, no sign-up and no wallet needed to play.
+      </p>
+      <h2>Game features</h2>
+      <ul>
+        <li>1v1, 2v2 and 3v3 matches against AI bots at Rookie, Pro and Legend difficulty, plus a Free Play mode.</li>
+        <li>Short 1-, 2- or 4-minute matches with sudden-death overtime.</li>
+        <li>Core Charge: each consecutive touch by your team charges the ball, so one goal can be worth up to 3 points (SUPERNOVA).</li>
+        <li>NOVA PULSE: a radial shockwave that blasts the ball and shoves nearby rivals.</li>
+        <li>ZERO-G SURGE: every minute the stadium drops to low gravity for ten seconds of aerial chaos.</li>
+        <li>Goal slow-motion, instant replays, demolitions, boost pads and a procedural synthwave soundtrack.</li>
+      </ul>
+      <h2>Play to earn on Arbitrum</h2>
+      <p>
+        After a match, claim your match points as NOVA tokens (ERC-20, 1 NOVA per point) with one transaction from
+        MetaMask, Brave Wallet, Phantom or any EIP-6963 browser wallet. Spend NOVA in the garage on NFT car bodies and
+        paints (ERC-1155 with on-chain SVG art), then drive them in your next match. Every claim records the match
+        result on-chain, and career stats and the leaderboard are read live from the blockchain. Fast blocks and
+        sub-cent fees on Arbitrum make a transaction per match practical.
+      </p>
+      <h2>How to play</h2>
+      <p>
+        Keyboard and mouse: W / S or the arrow keys to drive, A / D to steer, Space or right mouse to jump and dodge,
+        Shift or left mouse to boost, C to powerslide, Q / E to air roll, F for NOVA PULSE, Tab for ball cam and Esc to
+        pause. Standard gamepads are supported too.
+      </p>
+      <h2>Frequently asked questions</h2>
+      <h3>Is NOVABALL free to play?</h3>
+      <p>Yes. The whole game is free in the browser; a wallet is only needed to claim NOVA rewards and buy NFT cosmetics.</p>
+      <h3>What do I need to run it?</h3>
+      <p>A desktop browser with WebGL 2: the latest Chrome, Edge or Firefox, or Safari 16.4 and newer, with hardware acceleration enabled.</p>
+      <h3>Which blockchain does NOVABALL use?</h3>
+      <p>Arbitrum (currently the Arbitrum Sepolia testnet). Gas for a claim or a purchase is paid in ETH and costs a fraction of a cent.</p>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

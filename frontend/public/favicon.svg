@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0" stop-color="#1a2558"/>
+      <stop offset="1" stop-color="#05070d"/>
+    </radialGradient>
+    <radialGradient id="halo">
+      <stop offset=".5" stop-color="#1ec8ff" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#1ec8ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="core" cx="38%" cy="34%" r="72%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".22" stop-color="#c8f6ff"/>
+      <stop offset=".58" stop-color="#1ec8ff"/>
+      <stop offset="1" stop-color="#0b3f9c"/>
+    </radialGradient>
+    <pattern id="hex" width="42" height="72.75" patternUnits="userSpaceOnUse">
+      <path d="M21 0 42 12.12v24.25L21 48.5 0 36.37V12.12z M21 48.5V72.75" fill="none" stroke="#e6faff" stroke-width="2.4"/>
+    </pattern>
+    <clipPath id="front"><rect x="-300" y="0" width="600" height="300"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="218" fill="url(#halo)"/>
+  <g transform="translate(256 256) rotate(-22)">
+    <ellipse rx="214" ry="58" fill="none" stroke="#8be9ff" stroke-opacity=".55" stroke-width="11"/>
+  </g>
+  <circle cx="256" cy="256" r="142" fill="url(#core)"/>
+  <circle cx="256" cy="256" r="142" fill="url(#hex)" opacity=".28"/>
+  <ellipse cx="208" cy="200" rx="46" ry="30" fill="#fff" opacity=".55" transform="rotate(-30 208 200)"/>
+  <g transform="translate(256 256) rotate(-22)">
+    <ellipse rx="214" ry="58" fill="none" stroke="#bff4ff" stroke-width="11" clip-path="url(#front)"/>
+  </g>
+</svg>

@@ -54,7 +54,7 @@ export class EndScreen extends Panel {
 
   constructor(private readonly ctx: UIContext) {
     super();
-    this.headline = h('h1', { class: 'nb-end-title' });
+    this.headline = h('h2', { class: 'nb-end-title' });
     this.subline = div('nb-end-sub');
     this.score = div('nb-end-score');
     this.mine = div('nb-end-mine');

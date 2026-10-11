@@ -94,6 +94,8 @@ Commit `frontend/src/chain/deployments/421614.json`, then deploy the static site
 root directory to `frontend` (framework preset *Vite*, build `npm run build`, output `dist`) — that's it, there is no
 server and no secret. Production builds target Arbitrum Sepolia by default (`VITE_CHAIN_ID=421614`); optional build
 variables are in [frontend/.env.example](frontend/.env.example).
+SEO tags (canonical URL, share image, structured data, `sitemap.xml`) use the Vercel production domain automatically;
+elsewhere — or with a custom domain — set `VITE_SITE_URL` at build time.
 
 Prices and rewards can be changed after deployment without redeploying — see [contracts/README.md](contracts/README.md#economy-all-adjustable).
 

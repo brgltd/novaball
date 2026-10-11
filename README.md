@@ -92,7 +92,7 @@ cp .env.example .env            # PRIVATE_KEY=0x… (needs ~0.001 ETH: faucets l
 
 Commit `frontend/src/chain/deployments/421614.json`, then deploy the static site. On **Vercel**: import the repo, set the
 root directory to `frontend` (framework preset *Vite*, build `npm run build`, output `dist`) — that's it, there is no
-server and no secret. Production builds target Arbitrum Sepolia by default (`VITE_CHAIN_ID=421614`); optional build
+server and no secret. Builds and `npm run dev` target Arbitrum Sepolia by default (`VITE_NETWORK=testnet`); optional build
 variables are in [frontend/.env.example](frontend/.env.example).
 SEO tags (canonical URL, share image, structured data, `sitemap.xml`) use the Vercel production domain automatically;
 elsewhere — or with a custom domain — set `VITE_SITE_URL` at build time.
@@ -104,7 +104,7 @@ Prices and rewards can be changed after deployment without redeploying — see [
 A reward claim after every match and an NFT mint per purchase only make sense on a chain with fast blocks and tiny fees:
 on Arbitrum a claim confirms in about a second and costs a fraction of a cent, so asking the player for one transaction
 per match is reasonable. It's plain EVM, so the same contracts, Foundry scripts and viem code target Arbitrum One
-unchanged (`./deploy.sh arbitrum`, `VITE_CHAIN_ID=42161`).
+unchanged (`./deploy.sh arbitrum`, `VITE_NETWORK=mainnet`).
 
 ## Roadmap
 

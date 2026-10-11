@@ -14,9 +14,9 @@ NETWORK="${1:-arbitrum_sepolia}"
 [ -f .env ] && set -a && . ./.env && set +a
 
 case "$NETWORK" in
-  arbitrum_sepolia | sepolia) NETWORK=arbitrum_sepolia; RPC="${ARBITRUM_SEPOLIA_RPC_URL:-https://sepolia-rollup.arbitrum.io/rpc}"; CHAIN_ID=421614 ;;
-  arbitrum | arbitrum_one) NETWORK=arbitrum; RPC="${ARBITRUM_RPC_URL:-https://arb1.arbitrum.io/rpc}"; CHAIN_ID=42161 ;;
-  anvil | local) NETWORK=anvil; RPC="http://127.0.0.1:8545"; CHAIN_ID=31337 ;;
+  arbitrum_sepolia | sepolia) NETWORK=arbitrum_sepolia; RPC="${ARBITRUM_SEPOLIA_RPC_URL:-https://sepolia-rollup.arbitrum.io/rpc}"; CHAIN_ID=421614; WEB_NETWORK=testnet ;;
+  arbitrum | arbitrum_one) NETWORK=arbitrum; RPC="${ARBITRUM_RPC_URL:-https://arb1.arbitrum.io/rpc}"; CHAIN_ID=42161; WEB_NETWORK=mainnet ;;
+  anvil | local) NETWORK=anvil; RPC="http://127.0.0.1:8545"; CHAIN_ID=31337; WEB_NETWORK=local ;;
   *) echo "unknown network '$NETWORK' (arbitrum_sepolia | arbitrum | anvil)"; exit 1 ;;
 esac
 
@@ -26,6 +26,8 @@ if [ "$NETWORK" != anvil ]; then
     echo "PRIVATE_KEY is not set — copy .env.example to .env and fill it in."
     exit 1
   fi
+  # forge's vm.envUint needs the 0x prefix; accept keys pasted without it
+  [[ "$PRIVATE_KEY" == 0x* ]] || export PRIVATE_KEY="0x$PRIVATE_KEY"
   DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
   BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$RPC" --ether)
   echo "Deployer $DEPLOYER has $BALANCE ETH on $NETWORK"
@@ -51,6 +53,6 @@ Deployed to $NETWORK (chain $CHAIN_ID). Addresses: deployments/$CHAIN_ID.json (a
 
 Next — build the web app against this chain (it's a static site: deploy dist/ anywhere, e.g. Vercel):
   cd ../frontend
-  VITE_CHAIN_ID=$CHAIN_ID npm run build
+  VITE_NETWORK=$WEB_NETWORK npm run build
 Commit frontend/src/chain/deployments/$CHAIN_ID.json so production builds pick it up.
 NEXT

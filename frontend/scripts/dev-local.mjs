@@ -97,7 +97,7 @@ log('starting the game (Vite) — anvil is proxied at /rpc');
 const vite = spawn(process.execPath, [`${frontend}node_modules/vite/bin/vite.js`, ...viteArgs], {
   cwd: frontend,
   stdio: 'inherit',
-  env: { ...process.env, VITE_CHAIN_ID: '31337' },
+  env: { ...process.env, VITE_NETWORK: 'local' },
 });
 children.push(vite);
 vite.on('exit', (code) => {

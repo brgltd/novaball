@@ -1,6 +1,7 @@
 /**
  * Which chain the game talks to, and where. Build-time env (all optional):
- *   VITE_CHAIN_ID       31337 (local anvil; default in `vite` dev) | 421614 (Arbitrum Sepolia; default in builds) | 42161
+ *   VITE_NETWORK        testnet (Arbitrum Sepolia; the default when unset) | local (anvil, as `npm run dev:local` sets)
+ *                       | mainnet (Arbitrum One)
  *   VITE_RPC_URL        JSON-RPC endpoint (default: the chain's public RPC; local: the dev server's /rpc proxy to anvil)
  * Contract addresses come from ./deployments/<chainId>.json, written by contracts/script/Deploy.s.sol. Without a
  * deployment for the chain, on-chain features are off and every cosmetic is unlocked (the game is unchanged).
@@ -22,7 +23,12 @@ const deployments = import.meta.glob<Deployment>('./deployments/*.json', { eager
 
 const env = import.meta.env;
 
-export const CHAIN_ID = Number(env.VITE_CHAIN_ID || (env.DEV ? foundry.id : arbitrumSepolia.id));
+const NETWORKS: Record<string, number> = { local: foundry.id, testnet: arbitrumSepolia.id, mainnet: arbitrum.id };
+
+const network = (env.VITE_NETWORK || 'testnet').trim().toLowerCase();
+if (!Object.hasOwn(NETWORKS, network)) console.warn(`[novaball] unknown VITE_NETWORK "${network}" (local | testnet | mainnet), using testnet`);
+
+export const CHAIN_ID: number = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : arbitrumSepolia.id;
 
 const KNOWN: Record<number, Chain> = {
   [foundry.id]: { ...foundry, name: 'Local Anvil' },

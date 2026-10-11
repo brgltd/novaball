@@ -172,7 +172,7 @@ scripts/shot.mjs            headless Chrome screenshot/console helper (uses the 
   MetaMask, Brave Wallet, Phantom…), NOVA + ETH balances, garage catalog + NFT ownership, activity log, the last match's
   unclaimed reward (kept in localStorage until claimed), claims and purchases. Both are transactions sent by the
   player's wallet (`NovaArena.claim`, `NovaGarage.buy`), simulated first for readable errors. `config.ts` picks the
-  chain (`VITE_CHAIN_ID`) and reads `deployments/<chainId>.json` written by the Foundry deploy script; no deployment ⇒
+  chain (`VITE_NETWORK`: `testnet` by default, `local` for anvil) and reads `deployments/<chainId>.json` written by the Foundry deploy script; no deployment ⇒
   features off, every cosmetic unlocked. There is no backend.
 - UI: wallet card on the title screen, WALLET panel (connect, gas + faucet links, unclaimed reward), garage locks /
   price tags / BUY, the CLAIM REWARDS card on the end screen (`UIManager` reports the match and enforces ownership of

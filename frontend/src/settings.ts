@@ -73,8 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
   paint: '#e8eef7',
   lastTeamSize: 3,
   lastDifficulty: 'rookie',
-  // 1:00 SPRINT: too short for a ZERO-G SURGE in regulation (they fire when the clock crosses a whole minute)
-  lastDuration: 60,
+  // 2:00 STANDARD: a first-timer reaches the end screen in ~3 minutes (the first ZERO-G SURGE still comes at 1:00)
+  lastDuration: 120,
   lastMutators: { charge: true, pulse: true, surges: true, demolitions: true },
   seenTutorial: false,
 };

@@ -43,7 +43,7 @@ const VALID: Settings = {
   paint: '#ff4fa3',
   lastTeamSize: 3,
   lastDifficulty: 'legend',
-  lastDuration: 300,
+  lastDuration: 240,
   lastMutators: { charge: false, pulse: true, surges: false, demolitions: true },
   seenTutorial: true,
 };
